@@ -8,9 +8,15 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Routes
+const authRoutes = require('./routes/auth');
+
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Main Routes
+app.use('/api/auth', authRoutes);
 
 // Basic Route
 app.get('/api/health', (req, res) => {
