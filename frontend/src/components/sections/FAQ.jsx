@@ -26,7 +26,7 @@ const FAQ = () => {
   ];
 
   return (
-    <section className="py-24 bg-payfile-slate">
+    <section id="faq" className="py-24 bg-payfile-slate">
       <div className="max-w-3xl mx-auto px-6">
         <h2 className="text-4xl font-bold text-center mb-16">Frequently Asked Questions</h2>
         <Accordion items={items} />

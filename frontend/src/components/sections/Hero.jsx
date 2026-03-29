@@ -1,7 +1,10 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import Button from '../ui/Button';
 
 const Hero = () => {
+  const navigate = useNavigate();
+
   return (
     <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden hero-bg">
       {/* Background radial effects */}
@@ -19,7 +22,11 @@ const Hero = () => {
         </p>
         
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Button variant="primary" className="w-full sm:w-auto px-10 py-4 text-lg">
+          <Button 
+            variant="primary" 
+            className="w-full sm:w-auto px-10 py-4 text-lg"
+            onClick={() => navigate('/login')}
+          >
             Get Started
           </Button>
           <Button variant="secondary" className="w-full sm:w-auto px-10 py-4 text-lg">

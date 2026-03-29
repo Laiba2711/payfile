@@ -12,7 +12,7 @@ const Pricing = () => {
   ];
 
   return (
-    <section className="py-24 bg-payfile-black">
+    <section id="pricing" className="py-24 bg-payfile-black">
       <div className="max-w-7xl mx-auto px-6 text-center">
         <h2 className="text-4xl font-bold mb-4">Simple Pricing</h2>
         <p className="text-slate-400 mb-16">Store your files on the blockchain with transparent, pay-as-you-go pricing.</p>
