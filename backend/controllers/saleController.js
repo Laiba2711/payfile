@@ -57,10 +57,26 @@ exports.getPublicSale = async (req, res) => {
       return res.status(404).json({ status: 'fail', message: 'Sale listing not found' });
     }
 
+    // Calculate 5% Commission
+    const sellerPrice = parseFloat(sale.price);
+    const commission = sellerPrice * 0.05;
+    const totalPrice = (sellerPrice + commission).toFixed(sale.currency === 'BTC' ? 8 : 2);
+    const commissionPrice = commission.toFixed(sale.currency === 'BTC' ? 8 : 2);
+
+    const adminAddress = sale.currency === 'BTC' ? 
+      process.env.ADMIN_BTC_ADDRESS : 
+      process.env.ADMIN_USDT_ADDRESS;
+
     res.status(200).json({
       status: 'success',
       data: {
-        sale
+        sale: {
+          ...sale._doc,
+          sellerPrice: sale.price,
+          commissionPrice,
+          totalPrice,
+          adminAddress
+        }
       }
     });
   } catch (err) {

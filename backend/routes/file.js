@@ -39,7 +39,9 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-router.use(protect); // Apply protection to all file routes
+router.get('/public/download/:id', fileController.publicDownloadFile);
+
+router.use(protect); // Apply protection to all other file routes
 
 router.post('/upload', upload.single('file'), fileController.uploadFile);
 router.get('/', fileController.getFiles);

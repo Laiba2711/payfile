@@ -28,6 +28,9 @@ const Dashboard = () => {
   const [generatedSaleLink, setGeneratedSaleLink] = useState('');
   const [sales, setSales] = useState([]);
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+  const [searchTokenId, setSearchTokenId] = useState('');
+  const [purchaseDetails, setPurchaseDetails] = useState(null);
+  const [checkingToken, setCheckingToken] = useState(false);
 
   useEffect(() => {
     fetchFiles();
@@ -229,6 +232,40 @@ const Dashboard = () => {
       fetchSales(); // Refresh sales too since they might have been deleted
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to delete file');
+    }
+  };
+
+  const handleCheckToken = async () => {
+    if (!searchTokenId) return;
+    setCheckingToken(true);
+    setPurchaseDetails(null);
+    setError('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`/api/purchases/verify/${searchTokenId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setPurchaseDetails(response.data.data.purchase);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Token not found');
+      showToast('Token not found or unauthorized', 'error');
+    } finally {
+      setCheckingToken(false);
+    }
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!purchaseDetails) return;
+    try {
+      const token = localStorage.getItem('token');
+      await axios.patch(`/api/purchases/confirm/${purchaseDetails.tokenId}`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      showToast('Payment confirmed! File unlocked for buyer');
+      setPurchaseDetails({ ...purchaseDetails, status: 'confirmed' });
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to confirm payment');
     }
   };
 
@@ -502,35 +539,90 @@ const Dashboard = () => {
 
         {/* Manage Purchases Section */}
         <div className="mb-12">
-          <Card className="border-white/5 bg-white/[0.01]">
+          <Card className="border-white/5 bg-white/[0.01] p-8">
             <h2 className="text-xl font-bold mb-2">Manage Purchases</h2>
             <p className="text-sm text-slate-500 mb-8">Confirm payments and manage purchase tokens for your listings</p>
             
             <div className="space-y-6">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-400">Purchase Token ID</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Purchase Token ID</label>
                 <div className="flex gap-4">
                   <div className="flex-1">
                     <input 
                       type="text" 
-                      placeholder="Enter purchase token ID" 
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 outline-none focus:border-payfile-green/50 transition-colors text-white"
+                      placeholder="e.g., PAY-A1B2C3D4" 
+                      className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 outline-none focus:border-payfile-green/50 transition-colors text-white font-mono uppercase"
+                      value={searchTokenId}
+                      onChange={(e) => setSearchTokenId(e.target.value.toUpperCase())}
                     />
                   </div>
-                  <Button variant="primary" className="px-8 bg-payfile-green">
-                    Check
+                  <Button 
+                    variant="primary" 
+                    className="px-10 bg-payfile-green"
+                    onClick={handleCheckToken}
+                    disabled={checkingToken}
+                  >
+                    {checkingToken ? 'Checking...' : 'Check'}
                   </Button>
                 </div>
               </div>
 
-              <div className="p-4 rounded-xl bg-payfile-green/5 border border-payfile-green/10 flex gap-4">
+              {purchaseDetails && (
+                <div className="animate-fade-in space-y-6 bg-white/[0.02] border border-white/5 rounded-2xl p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-payfile-green/10 flex items-center justify-center">
+                        <ShoppingBag className="w-5 h-5 text-payfile-green" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-white">{purchaseDetails.file?.name}</h4>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Token: {purchaseDetails.tokenId}</p>
+                      </div>
+                    </div>
+                    <span className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${
+                      purchaseDetails.status === 'confirmed' ? 'bg-payfile-green/10 text-payfile-green border-payfile-green/20' : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
+                    }`}>
+                      {purchaseDetails.status}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-8 py-4 border-y border-white/5">
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-1">Expected Payment</p>
+                      <p className="text-lg font-black text-white">{purchaseDetails.sale?.price} <span className="text-payfile-green">{purchaseDetails.sale?.currency}</span></p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-1">Buyer Instructions</p>
+                      <p className="text-xs text-slate-400">Buyer will send to your address:</p>
+                      <p className="text-[10px] font-mono text-slate-500 truncate">{purchaseDetails.sale?.address}</p>
+                    </div>
+                  </div>
+
+                  {purchaseDetails.status === 'pending' ? (
+                    <Button 
+                      variant="primary" 
+                      className="w-full bg-payfile-green text-black"
+                      onClick={handleConfirmPayment}
+                    >
+                      Confirm Payment Received
+                    </Button>
+                  ) : (
+                    <div className="flex items-center justify-center gap-2 py-3 bg-payfile-green/5 border border-payfile-green/10 rounded-xl">
+                      <CheckCircle2 className="w-4 h-4 text-payfile-green" />
+                      <span className="text-xs font-bold text-payfile-green uppercase tracking-widest">Payment Verified & File Unlocked</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="p-4 rounded-xl bg-white/[0.01] border border-white/5 flex gap-4">
                 <div className="mt-1">
-                  <Info className="w-5 h-5 text-payfile-green" />
+                  <Info className="w-5 h-5 text-slate-600" />
                 </div>
                 <div className="space-y-1">
-                  <h4 className="text-sm font-bold text-payfile-green">How it works:</h4>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    When a buyer generates a purchase token and sends Bitcoin to your address, enter the token ID here to check its status. Once you verify the payment in your Bitcoin wallet, click "Confirm Payment" to unlock the file for download.
+                  <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">How it works:</h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    When a buyer generates a purchase token and sends payment to your address, enter the token ID here to check its status. Once you verify the payment in your wallet, click "Confirm Payment" to unlock the file for the buyer's download.
                   </p>
                 </div>
               </div>

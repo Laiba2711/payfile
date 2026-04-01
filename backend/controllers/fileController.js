@@ -2,6 +2,7 @@ const File = require('../models/File');
 const Sale = require('../models/Sale');
 const path = require('path');
 const fs = require('fs');
+const Purchase = require('../models/Purchase');
 
 exports.uploadFile = async (req, res) => {
   try {
@@ -101,6 +102,34 @@ exports.deleteFile = async (req, res) => {
       status: 'success',
       message: 'File and associated data deleted successfully'
     });
+  } catch (err) {
+    res.status(400).json({ status: 'fail', message: err.message });
+  }
+};
+
+exports.publicDownloadFile = async (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token) {
+      return res.status(401).json({ status: 'fail', message: 'Purchase token required' });
+    }
+
+    const purchase = await Purchase.findOne({ tokenId: token, status: 'confirmed' });
+    if (!purchase) {
+      return res.status(403).json({ status: 'fail', message: 'Invalid or unconfirmed purchase token' });
+    }
+
+    const file = await File.findById(req.params.id);
+    if (!file || file._id.toString() !== purchase.file.toString()) {
+      return res.status(404).json({ status: 'fail', message: 'File not matched' });
+    }
+
+    // Check if file exists on disk
+    if (!fs.existsSync(file.path)) {
+      return res.status(404).json({ status: 'fail', message: 'File not found on server' });
+    }
+
+    res.download(file.path, file.name);
   } catch (err) {
     res.status(400).json({ status: 'fail', message: err.message });
   }

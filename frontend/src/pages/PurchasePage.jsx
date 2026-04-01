@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { FileText, Bitcoin, Info, CheckCircle2, AlertCircle, Clock, ShieldCheck, Download } from 'lucide-react';
+import { FileText, Bitcoin, Info, CheckCircle2, AlertCircle, Clock, ShieldCheck, Download, ExternalLink } from 'lucide-react';
 import axios from 'axios';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -12,7 +12,8 @@ const PurchasePage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tokenGenerated, setTokenGenerated] = useState(false);
-  const [generatedToken, setGeneratedToken] = useState('');
+  const [purchase, setPurchase] = useState(null);
+  const [checkingStatus, setCheckingStatus] = useState(false);
 
   useEffect(() => {
     fetchSaleDetails();
@@ -31,12 +32,50 @@ const PurchasePage = () => {
     }
   };
 
-  const handleGenerateToken = () => {
-    // Phase 2 implementation will call API
-    // For now, simulate token generation for the UI proof-of-concept
-    const mockToken = 'PURCHASE-' + Math.random().toString(36).substring(2, 10).toUpperCase();
-    setGeneratedToken(mockToken);
-    setTokenGenerated(true);
+  useEffect(() => {
+    let interval;
+    if (tokenGenerated && purchase && purchase.status === 'pending') {
+      interval = setInterval(async () => {
+        try {
+          const response = await axios.get(`/api/purchases/status/${purchase.tokenId}`);
+          if (response.data.data.status === 'confirmed') {
+            setPurchase(prev => ({ ...prev, status: 'confirmed' }));
+            clearInterval(interval);
+          }
+        } catch (err) {
+          console.error('Error polling status:', err);
+        }
+      }, 10000); // Poll every 10s
+    }
+    return () => clearInterval(interval);
+  }, [tokenGenerated, purchase]);
+
+  const handleGenerateToken = async () => {
+    try {
+      const response = await axios.post('/api/purchases', { saleId });
+      if (response.data.status === 'success') {
+        setPurchase(response.data.data.purchase);
+        setTokenGenerated(true);
+      }
+    } catch (err) {
+      setError('Failed to generate purchase token. Please try again.');
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!purchase || purchase.status !== 'confirmed') return;
+    
+    try {
+      // Use the public download endpoint with the token
+      const downloadUrl = `/api/files/public/download/${sale.file._id}?token=${purchase.tokenId}`;
+      
+      // We can use a simple window.open or a link for native browser download experience
+      // since the response is a file attachment
+      window.open(downloadUrl, '_blank');
+    } catch (err) {
+      console.error('Download error:', err);
+      alert('Failed to start download. Please try again.');
+    }
   };
 
   const formatFileSize = (bytes) => {
@@ -147,7 +186,7 @@ const PurchasePage = () => {
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.3em] mb-3">Price</p>
               <div className="flex flex-col items-center">
                 <span className="text-5xl font-black text-white tracking-tighter mb-1">
-                  {sale.price} <span className="text-payfile-green">{sale.currency}</span>
+                  {sale.totalPrice} <span className="text-payfile-green">{sale.currency}</span>
                 </span>
                 <span className="text-[10px] font-bold text-slate-500 bg-white/5 px-3 py-1 rounded-full uppercase tracking-widest">{sale.currency}</span>
               </div>
@@ -161,10 +200,10 @@ const PurchasePage = () => {
               </div>
               <ul className="space-y-3">
                 {[
-                  'Click "Generate Purchase Token" below',
-                  `Send the exact amount in ${sale.currency} to the seller's address`,
-                  'Wait for the seller to confirm your payment',
-                  'Download your file once payment is confirmed'
+                  'Click "Pay with Crypto" below',
+                  'You will be redirected to BitCart checkout',
+                  'Pay the listed amount in your preferred coin (BTC/USDT)',
+                  'Once paid, return here to download your file'
                 ].map((step, i) => (
                   <li key={i} className="flex gap-3 text-xs text-slate-400 leading-relaxed group">
                     <span className="text-payfile-green font-bold opacity-50 group-hover:opacity-100 transition-opacity whitespace-nowrap">{i + 1}.</span>
@@ -182,30 +221,58 @@ const PurchasePage = () => {
                 onClick={handleGenerateToken}
                 disabled={isExpired}
               >
-                {isExpired ? 'Listing Expired' : 'Generate Purchase Token'}
+                {isExpired ? 'Listing Expired' : 'Pay with Crypto'}
               </Button>
             ) : (
               <div className="space-y-4 animate-fade-in border-2 border-payfile-green/20 bg-payfile-green/5 rounded-2xl p-6">
                 <div className="flex items-center gap-3 mb-2">
-                  <CheckCircle2 className="w-5 h-5 text-payfile-green" />
-                  <span className="text-sm font-bold text-payfile-green uppercase tracking-wider">Purchase Token Generated</span>
+                  <CheckCircle2 className={`w-5 h-5 ${purchase.status === 'confirmed' ? 'text-payfile-green' : 'text-yellow-500'}`} />
+                  <span className={`text-sm font-bold uppercase tracking-wider ${purchase.status === 'confirmed' ? 'text-payfile-green' : 'text-yellow-500'}`}>
+                    {purchase.status === 'confirmed' ? 'Payment Verified' : 'Purchase Token Generated'}
+                  </span>
                 </div>
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Your Payment Address</label>
-                    <div className="bg-black/80 rounded-xl px-4 py-3 font-mono text-sm text-payfile-green border border-payfile-green/10 break-all select-all">
-                      {sale.address}
+                  {purchase.status === 'pending' ? (
+                    <>
+                      <div className="space-y-4">
+                        <p className="text-xs text-center text-slate-400">Please complete the payment on BitCart to unlock your file.</p>
+                        <Button 
+                          variant="primary" 
+                          className="w-full py-3 bg-white/10 hover:bg-white/20 text-white flex items-center justify-center gap-2 border border-white/5"
+                          onClick={() => window.open(purchase.checkoutUrl, '_blank')}
+                        >
+                          Open Checkout <ExternalLink className="w-4 h-4" />
+                        </Button>
+                      </div>
+
+                      <div className="flex items-center justify-center gap-3 py-3 px-4 bg-white/5 rounded-xl border border-white/5 animate-pulse">
+                        <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Waiting for payment confirmation...</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-6 animate-fade-in">
+                      <div className="p-6 bg-payfile-green/10 border border-payfile-green/20 rounded-2xl text-center last:space-y-4">
+                        <CheckCircle2 className="w-12 h-12 text-payfile-green mx-auto mb-2" />
+                        <h4 className="text-xl font-black text-white tracking-tight">Your file is ready!</h4>
+                        <p className="text-xs text-slate-400">The payment has been verified.</p>
+                      </div>
+                      <Button 
+                        variant="primary" 
+                        className="w-full py-4 bg-payfile-green text-black flex items-center justify-center gap-3 hover:scale-[1.02] transition-transform"
+                        onClick={handleDownload}
+                      >
+                        <Download className="w-5 h-5" />
+                        Download Now
+                      </Button>
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Share this Token with Seller</label>
-                    <div className="bg-black/80 rounded-xl px-4 py-3 font-mono text-lg text-center font-black text-white border border-white/5 tracking-widest select-all">
-                      {generatedToken}
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-slate-500 text-center leading-relaxed">
-                    Once you've sent the payment, provide the token above to the seller to receive your file.
-                  </p>
+                  )}
+                  
+                  {purchase.status === 'pending' && (
+                    <p className="text-[10px] text-slate-500 text-center leading-relaxed">
+                      Your file will be available for download once the BitCart invoice is marked as complete. This page polls every 10s.
+                    </p>
+                  )}
                 </div>
               </div>
             )}

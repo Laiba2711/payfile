@@ -12,6 +12,7 @@ const PORT = process.env.PORT || 5000;
 const authRoutes = require('./routes/auth');
 const fileRoutes = require('./routes/file');
 const saleRoutes = require('./routes/sale');
+const purchaseRoutes = require('./routes/purchase');
 
 // Middleware
 app.use(cors());
@@ -21,6 +22,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/sales', saleRoutes);
+app.use('/api/purchases', purchaseRoutes);
 
 // Basic Route
 app.get('/api/health', (req, res) => {

@@ -1,0 +1,132 @@
+services:
+  # ─── PostgreSQL Database ───────────────────────────────────────────────────
+  postgres:
+    image: postgres:13-alpine
+    container_name: bitcart_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bitcart
+      POSTGRES_USER: bitcart
+      POSTGRES_PASSWORD: bitcart_pass
+    volumes:
+      - bitcart_postgres_data:/var/lib/postgresql/data
+    networks:
+      - bitcart_net
+
+  # ─── Redis ────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: bitcart_redis
+    restart: unless-stopped
+    networks:
+      - bitcart_net
+
+  # ─── BTC Daemon (Electrum, testnet) ───────────────────────────────────────
+  btc:
+    image: bitcart/bitcart-btc:stable
+    container_name: bitcart_btc
+    restart: unless-stopped
+    environment:
+      BTC_NETWORK: testnet
+      BTC_LIGHTNING: "false"
+    volumes:
+      - bitcart_btc_data:/data
+    networks:
+      - bitcart_net
+
+  # ─── Permission-fixer (Init) ───────────────────────────────────────────
+  api_init:
+    image: alpine:latest
+    container_name: bitcart_api_init
+    user: root
+    volumes:
+      - bitcart_app_data:/app/data
+    networks:
+      - bitcart_net
+    command: chown -R 1000:1000 /app/data
+
+  # ─── Bitcart Backend API ──────────────────────────────────────────────────
+  api:
+    image: bitcart/bitcart:stable
+    container_name: bitcart_api
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+      - btc
+      - api_init
+    user: root
+    command: python main.py
+    environment:
+      BITCART_DEBUG: "true"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_DATABASE: bitcart
+      DB_USER: bitcart
+      DB_PASSWORD: bitcart_pass
+      REDIS_HOST: redis://redis
+      BITCART_CRYPTOS: btc
+      BTC_HOST: btc
+      BTC_PORT: "5000"
+      BTC_NETWORK: testnet
+    ports:
+      - "8000:8000"
+    volumes:
+      - bitcart_app_data:/app/data
+    networks:
+      - bitcart_net
+
+  # ─── Bitcart Worker (background tasks) ────────────────────────────────────
+  worker:
+    image: bitcart/bitcart:stable
+    container_name: bitcart_worker
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+      - btc
+      - api_init
+    command: python worker.py
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_DATABASE: bitcart
+      DB_USER: bitcart
+      DB_PASSWORD: bitcart_pass
+      REDIS_HOST: redis://redis
+      BITCART_CRYPTOS: btc
+      BTC_HOST: btc
+      BTC_PORT: "5000"
+      BTC_NETWORK: testnet
+    volumes:
+      - bitcart_app_data:/app/data
+    networks:
+      - bitcart_net
+
+  # ─── Bitcart Admin Dashboard ──────────────────────────────────────────────
+  admin:
+    image: bitcart/bitcart-admin:stable
+    container_name: bitcart_admin
+    restart: unless-stopped
+    depends_on:
+      - api
+    command: yarn start
+    environment:
+      BITCART_ADMIN_API_URL: http://localhost:8000
+      BITCART_ADMIN_API_URL_SERVER: http://api:8000
+      BITCART_ADMIN_URL: http://localhost:4000
+      NUXT_HOST: 0.0.0.0
+      NUXT_PORT: "4000"
+    ports:
+      - "4000:4000"
+    networks:
+      - bitcart_net
+
+volumes:
+  bitcart_postgres_data:
+  bitcart_btc_data:
+  bitcart_app_data:
+
+networks:
+  bitcart_net:
+    driver: bridge
