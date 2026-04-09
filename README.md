@@ -7,6 +7,7 @@ PayFile is a high-fidelity full-stack MERN application for uploading, sharing, a
 - **Modern UI**: Dark-themed landing page with neon green accents and glassmorphism.
 - **Authentication**: Secure JWT-based login, registration, and password recovery.
 - **User Dashboard**: Manage uploads, sale listings, and purchase tokens.
+- **Bitcart Integration**: Seamless Bitcoin payment processing with automated payouts.
 - **Full Stack**: Powered by MongoDB, Express, React (Vite), and Node.js.
 - **Vercel Ready**: Pre-configured for seamless cloud deployment.
 
@@ -14,6 +15,7 @@ PayFile is a high-fidelity full-stack MERN application for uploading, sharing, a
 
 - **Frontend**: React, Vite, Tailwind CSS v4, Lucide Icons, React Router.
 - **Backend**: Node.js, Express, Mongoose, JWT, Bcryptjs.
+- **Payments**: Bitcart (Self-hosted via Docker).
 - **Database**: MongoDB.
 
 ## Getting Started
@@ -38,6 +40,21 @@ PayFile is a high-fidelity full-stack MERN application for uploading, sharing, a
 
 3. Set up environment variables:
    - Create a `.env` file in the `backend/` directory using `.env.example` as a template.
+   - Configure your Bitcart credentials in the `.env` file.
+
+### Bitcart Setup (Optional for Local Payments)
+
+1. Navigate to the `bitcart/` directory:
+   ```bash
+   cd bitcart
+   ```
+
+2. Start Bitcart using Docker:
+   ```bash
+   docker-compose up -d
+   ```
+
+3. Access the Bitcart Admin Dashboard at `http://localhost:8000` to create your store and obtain API keys.
 
 ### Development
 
