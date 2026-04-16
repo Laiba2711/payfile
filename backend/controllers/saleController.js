@@ -1,85 +1,93 @@
 const Sale = require('../models/Sale');
+const Settings = require('../models/Settings');
 
-exports.createSale = async (req, res) => {
-  try {
-    const { fileId, price, currency, address, expiry } = req.body;
+const catchAsync = require('../utils/catchAsync');
+const AppError = require('../utils/AppError');
 
-    let expiresAt;
-    if (expiry) {
-      expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + parseInt(expiry));
+
+// Helper: decimal precision by currency
+const decimals = (currency) => currency === 'BTC' ? 8 : 2;
+
+exports.createSale = catchAsync(async (req, res, next) => {
+  const { fileId, price, currency, network, address, expiry } = req.body;
+
+  let expiresAt;
+  if (expiry) {
+    expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + parseInt(expiry));
+  }
+
+  const newSale = await Sale.create({
+    file: fileId,
+    seller: req.user.id,
+    price,
+    currency,
+    network: currency === 'USDT' ? (network || 'TRC20') : '',
+    address,
+    expiresAt
+  });
+
+  res.status(201).json({
+    status: 'success',
+    data: {
+      sale: newSale
     }
+  });
+});
 
-    const newSale = await Sale.create({
-      file: fileId,
-      seller: req.user.id,
-      price,
-      currency,
-      address,
-      expiresAt
-    });
 
-    res.status(201).json({
-      status: 'success',
-      data: {
-        sale: newSale
-      }
-    });
-  } catch (err) {
-    res.status(400).json({ status: 'fail', message: err.message });
-  }
-};
-
-exports.getSales = async (req, res) => {
-  try {
-    const sales = await Sale.find({ seller: req.user.id }).populate('file').sort('-createdAt');
-    res.status(200).json({
-      status: 'success',
-      results: sales.length,
-      data: {
-        sales
-      }
-    });
-  } catch (err) {
-    res.status(400).json({ status: 'fail', message: err.message });
-  }
-};
-
-exports.getPublicSale = async (req, res) => {
-  try {
-    const sale = await Sale.findById(req.params.id)
-      .populate({
-        path: 'file',
-        select: 'name size mimeType createdAt expiresAt'
-      });
-
-    if (!sale) {
-      return res.status(404).json({ status: 'fail', message: 'Sale listing not found' });
+exports.getSales = catchAsync(async (req, res, next) => {
+  const sales = await Sale.find({ seller: req.user.id }).populate('file').sort('-createdAt');
+  res.status(200).json({
+    status: 'success',
+    results: sales.length,
+    data: {
+      sales
     }
+  });
+});
 
-    // Calculate 5% Commission
-    const sellerPrice = parseFloat(sale.price);
-    const commission = sellerPrice * 0.05;
-    const totalPrice = (sellerPrice + commission).toFixed(sale.currency === 'BTC' ? 8 : 2);
-    const commissionPrice = commission.toFixed(sale.currency === 'BTC' ? 8 : 2);
 
-    const adminAddress = sale.currency === 'BTC' ? 
-      process.env.ADMIN_BTC_ADDRESS : 
-      process.env.ADMIN_USDT_ADDRESS;
-
-    res.status(200).json({
-      status: 'success',
-      data: {
-        sale: {
-          ...sale._doc,
-          sellerPrice: sale.price,
-          commissionPrice,
-          totalPrice,
-          adminAddress
-        }
-      }
+exports.getPublicSale = catchAsync(async (req, res, next) => {
+  const sale = await Sale.findById(req.params.id)
+    .populate({
+      path: 'file',
+      select: 'name size mimeType createdAt expiresAt'
     });
-  } catch (err) {
-    res.status(400).json({ status: 'fail', message: err.message });
+
+  if (!sale) {
+    return next(new AppError('Sale listing not found', 404));
   }
-};
+
+  const dp = decimals(sale.currency);
+
+  const sellerPrice = parseFloat(sale.price);
+  const commission = sellerPrice * 0.05;
+  const totalPrice = (sellerPrice + commission).toFixed(dp);
+  const commissionPrice = commission.toFixed(dp);
+
+  const settings = await Settings.findOne() || {};
+  let adminAddress;
+  if (sale.currency === 'BTC') {
+    adminAddress = process.env.ADMIN_BTC_ADDRESS || settings.adminBtcAddress;
+  } else if (sale.network === 'ERC20') {
+    adminAddress = process.env.ADMIN_USDT_ERC20_ADDRESS || settings.adminUsdtErc20Address || settings.adminUsdtAddress;
+  } else {
+    adminAddress = process.env.ADMIN_USDT_TRC20_ADDRESS || settings.adminUsdtTrc20Address || settings.adminUsdtAddress;
+  }
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      sale: {
+        ...sale._doc,
+        sellerPrice: sale.price,
+        commissionPrice,
+        totalPrice,
+        adminAddress
+      }
+    }
+  });
+});
+
+

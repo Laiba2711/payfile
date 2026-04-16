@@ -38,11 +38,11 @@ const Register = ({ onRegister }) => {
   return (
     <AuthLayout 
       title="Create Account" 
-      subtitle="Join PayFile and start sharing files"
+      subtitle="Join PayFile today to start selling files"
     >
       <form className="space-y-5" onSubmit={handleSubmit}>
         {error && (
-          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 text-sm">
+          <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-xs font-bold uppercase tracking-wide animate-fade-in">
             {error}
           </div>
         )}
@@ -65,7 +65,7 @@ const Register = ({ onRegister }) => {
         <Input 
           label="Email Address" 
           type="email" 
-          placeholder="name@example.com" 
+          placeholder="john@example.com" 
           value={formData.email}
           onChange={(e) => setFormData({ ...formData, email: e.target.value })}
           required 
@@ -83,22 +83,22 @@ const Register = ({ onRegister }) => {
           <input 
             type="checkbox" 
             id="terms" 
-            className="w-4 h-4 rounded border-white/10 bg-white/5 text-payfile-green focus:ring-payfile-green/50" 
+            className="w-4 h-4 rounded border-gray-300 bg-payfile-cream/50 text-payfile-maroon focus:ring-payfile-gold" 
             required
           />
-          <label htmlFor="terms" className="text-sm text-slate-400">
-            I agree to the <a href="#" className="text-white hover:underline">Terms of Service</a>
+          <label htmlFor="terms" className="text-sm text-gray-400 font-medium">
+            I accept the <a href="#" className="text-payfile-amber hover:underline hover:text-payfile-maroon transition-colors">Terms of Service</a>
           </label>
         </div>
 
-        <Button variant="primary" className="w-full py-3.5" disabled={loading}>
-          {loading ? 'Creating account...' : 'Get Started'}
+        <Button variant="primary" className="w-full py-4 font-black shadow-lg shadow-payfile-amber/20" disabled={loading}>
+          {loading ? 'Registering...' : 'Register'}
         </Button>
 
-        <p className="text-center text-slate-500 text-sm">
+        <p className="text-center text-gray-400 text-[10px] font-bold uppercase tracking-widest pt-4">
           Already have an account?{' '}
-          <Link to="/login" className="text-white hover:text-payfile-green transition-colors font-medium">
-            Sign In
+          <Link to="/login" className="text-payfile-maroon hover:text-payfile-gold transition-colors ml-1 underline decoration-payfile-gold/30 underline-offset-4">
+            Login
           </Link>
         </p>
       </form>

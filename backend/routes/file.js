@@ -41,11 +41,17 @@ const upload = multer({ storage: storage });
 
 router.get('/public/download/:id', fileController.publicDownloadFile);
 
+// New public endpoints for shared files
+router.get('/shared/info/:id', fileController.getSharedFileInfo);
+router.post('/shared/download/:id', fileController.sharedDownloadFile);
+router.get('/public/preview/:id', fileController.getPreviewFile);
+
 router.use(protect); // Apply protection to all other file routes
 
 router.post('/upload', upload.single('file'), fileController.uploadFile);
 router.get('/', fileController.getFiles);
 router.get('/download/:id', fileController.downloadFile);
+router.post('/:id/share', fileController.shareFile);
 router.delete('/:id', fileController.deleteFile);
 
 module.exports = router;

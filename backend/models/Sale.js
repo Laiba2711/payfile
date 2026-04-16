@@ -20,6 +20,11 @@ const saleSchema = new mongoose.Schema({
     enum: ['BTC', 'USDT'],
     default: 'BTC'
   },
+  network: {
+    type: String,
+    enum: ['', 'TRC20', 'ERC20'],
+    default: ''
+  },
   address: {
     type: String,
     required: [true, 'Sale must have a payment address']
@@ -41,3 +46,4 @@ const saleSchema = new mongoose.Schema({
 const Sale = mongoose.model('Sale', saleSchema);
 
 module.exports = Sale;
+

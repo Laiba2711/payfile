@@ -20,6 +20,7 @@ const protect = (req, res, next) => {
 // Public routes for buyers
 router.post('/', purchaseController.createPurchase);
 router.get('/status/:tokenId', purchaseController.getPurchaseStatus);
+router.get('/checkout/:tokenId', purchaseController.getCheckoutData);
 router.post('/bitcart-webhook', purchaseController.handleBitCartWebhook);
 
 // Protected routes for sellers

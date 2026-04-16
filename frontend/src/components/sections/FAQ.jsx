@@ -5,15 +5,15 @@ const FAQ = () => {
   const items = [
     {
       question: 'What is PayFile?',
-      answer: 'PayFile is a decentralized file storage and sharing platform built on the Internet Computer blockchain. It allows you to upload, share, and even sell your files using Bitcoin.',
+      answer: 'PayFile is a decentralized file storage and sharing platform built on a distributed node network. It allows you to upload, share, and even sell your files using Bitcoin.',
     },
     {
       question: 'How does Bitcoin payment work?',
-      answer: 'PayFile integrates with the Bitcoin network via the Internet Computer\'s direct integration. You can set a price in BTC for your files, and users can purchase them directly.',
+      answer: 'PayFile integrates with the Bitcoin network via our native high-speed protocol. You can set a price in BTC for your files, and users can purchase them directly.',
     },
     {
       question: 'Is my data secure?',
-      answer: 'Yes, your data is encrypted and stored across multiple nodes on the Internet Computer blockchain, ensuring high availability and protection against single points of failure.',
+      answer: 'Yes, your data is encrypted and stored across multiple nodes on the PayFile Distributed Network, ensuring high availability and protection against single points of failure.',
     },
     {
       question: 'What file types are supported?',
@@ -21,7 +21,7 @@ const FAQ = () => {
     },
     {
       question: 'How do I get started?',
-      answer: 'Simply click "Get Started," sign in with your Internet Identity, and you can begin uploading your first files immediately.',
+      answer: 'Simply click "Get Started," sign in with your Secure Identity, and you can begin uploading your first files immediately.',
     },
   ];
 

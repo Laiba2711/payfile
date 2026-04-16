@@ -28,24 +28,24 @@ const Login = ({ onLogin }) => {
 
   return (
     <AuthLayout 
-      title="Welcome Back" 
-      subtitle="Enter your details to access your account"
+      title="Login" 
+      subtitle="Sign in to your account to continue"
     >
       <form className="space-y-6" onSubmit={handleSubmit}>
         {error && (
-          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 text-sm">
+          <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-xs font-bold uppercase tracking-wide animate-fade-in shadow-sm">
             {error}
           </div>
         )}
         <Input 
           label="Email Address" 
           type="email" 
-          placeholder="name@example.com" 
+          placeholder="Enter your email" 
           value={formData.email}
           onChange={(e) => setFormData({ ...formData, email: e.target.value })}
           required 
         />
-        <div className="space-y-1">
+        <div className="space-y-2">
           <Input 
             label="Password" 
             type="password" 
@@ -54,24 +54,24 @@ const Login = ({ onLogin }) => {
             onChange={(e) => setFormData({ ...formData, password: e.target.value })}
             required 
           />
-          <div className="flex justify-end">
+          <div className="flex justify-end pr-1">
             <Link 
               to="/forgot-password" 
-              className="text-sm text-payfile-green hover:underline transition-all"
+              className="text-[10px] font-black text-payfile-amber uppercase tracking-widest hover:text-payfile-maroon transition-all"
             >
-              Forgot password?
+              Forgot Password?
             </Link>
           </div>
         </div>
 
-        <Button variant="primary" className="w-full py-3.5 mt-2" disabled={loading}>
-          {loading ? 'Signing in...' : 'Sign In'}
+        <Button variant="primary" className="w-full py-4 mt-2 font-black shadow-lg shadow-payfile-amber/20" disabled={loading}>
+          {loading ? 'Logging in...' : 'Login'}
         </Button>
 
-        <p className="text-center text-slate-500 text-sm">
+        <p className="text-center text-gray-400 text-[10px] font-bold uppercase tracking-widest py-4">
           Don't have an account?{' '}
-          <Link to="/register" className="text-white hover:text-payfile-green transition-colors font-medium">
-            Create an account
+          <Link to="/register" className="text-payfile-maroon hover:text-payfile-gold transition-colors ml-1 underline decoration-payfile-gold/30 underline-offset-4">
+            Register
           </Link>
         </p>
       </form>

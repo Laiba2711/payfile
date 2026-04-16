@@ -4,7 +4,8 @@ const purchaseSchema = new mongoose.Schema({
   tokenId: {
     type: String,
     required: true,
-    unique: true
+    unique: true,
+    index: true
   },
   sale: {
     type: mongoose.Schema.Types.ObjectId,
@@ -24,7 +25,8 @@ const purchaseSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['pending', 'confirmed', 'expired'],
-    default: 'pending'
+    default: 'pending',
+    index: true
   },
   bitcartId: {
     type: String,
@@ -34,15 +36,33 @@ const purchaseSchema = new mongoose.Schema({
     type: String,
     sparse: true
   },
+  sellerPayoutProcessed: {
+    type: Boolean,
+    default: false
+  },
+  adminPayoutProcessed: {
+    type: Boolean,
+    default: false
+  },
+  payoutsProcessed: {
+    type: Boolean,
+    default: false
+  },
   checkoutUrl: {
     type: String
   },
   createdAt: {
     type: Date,
     default: Date.now,
-    expires: 3600 * 48 // Tokens expire after 48 hours for security
+    expires: 3600 * 48, // Tokens expire after 48 hours for security
+    index: true
   }
 });
+
+// Compound indexes for common admin queries
+purchaseSchema.index({ seller: 1, status: 1 });
+purchaseSchema.index({ createdAt: -1 });
+
 
 const Purchase = mongoose.model('Purchase', purchaseSchema);
 

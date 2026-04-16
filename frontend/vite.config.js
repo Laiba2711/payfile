@@ -6,9 +6,14 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    host: true, // Needed for Docker
+    port: 5173,
+    watch: {
+      usePolling: true, // Needed for Windows/Mac Docker volumes
+    },
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: process.env.VITE_API_URL || 'http://backend:5000',
         changeOrigin: true,
       },
     },

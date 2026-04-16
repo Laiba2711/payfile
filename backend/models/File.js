@@ -37,6 +37,15 @@ const fileSchema = new mongoose.Schema({
   },
   expiresAt: {
     type: Date
+  },
+  sharePassword: {
+    type: String
+  },
+  shareExpiresAt: {
+    type: Date
+  },
+  previewPath: {
+    type: String
   }
 }, { timestamps: true });
 
