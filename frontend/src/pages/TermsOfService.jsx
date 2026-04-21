@@ -14,7 +14,7 @@ const TermsOfService = () => {
             Terms of Service
           </h1>
           <p className="text-gray-500 font-medium max-w-xl mx-auto">
-            By accessing the PayFile Network, you agree to comply with our localized settlement protocols and marketplace standards.
+            By accessing the SatoshiBin Network, you agree to comply with our localized settlement protocols and marketplace standards.
           </p>
         </div>
 
@@ -29,7 +29,7 @@ const TermsOfService = () => {
             </div>
             <div className="prose prose-payfile text-gray-600 leading-relaxed font-medium">
               <p className="mb-4">
-                PayFile is a distributed digital marketplace. Users are granted a limited license to upload, distribute, and sell legitimate digital assets via our Bitcoin-native protocol. 
+                SatoshiBin is a distributed digital marketplace. Users are granted a limited license to upload, distribute, and sell legitimate digital assets via our Bitcoin-native protocol. 
               </p>
               <p>
                 You must be of legal age in your jurisdiction to engage in Bitcoin settlements.
@@ -47,7 +47,7 @@ const TermsOfService = () => {
             </div>
             <div className="prose prose-payfile text-gray-600 leading-relaxed font-medium">
               <p className="mb-4">
-                PayFile provides the infrastructure for secure file exchange and Bitcoin invoicing. In exchange for these services:
+                SatoshiBin provides the infrastructure for secure file exchange and Bitcoin invoicing. In exchange for these services:
               </p>
               <div className="bg-payfile-maroon p-8 rounded-3xl text-payfile-white mb-6 overflow-hidden relative">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-payfile-gold/20 blur-3xl rounded-full" />
@@ -77,7 +77,7 @@ const TermsOfService = () => {
               <h2 className="text-2xl font-black text-payfile-maroon uppercase tracking-tight">3. Seller Responsibilities</h2>
             </div>
             <div className="prose prose-payfile text-gray-600 leading-relaxed font-medium">
-              <p className="mb-4">Sellers on the PayFile Network must ensure that all content uploaded:</p>
+              <p className="mb-4">Sellers on the SatoshiBin Network must ensure that all content uploaded:</p>
               <ul className="space-y-4 list-none p-0">
                 <li className="flex gap-3 items-center">
                     <ShieldCheck className="w-5 h-5 text-payfile-gold shrink-0" />
@@ -105,7 +105,7 @@ const TermsOfService = () => {
             </div>
             <div className="prose prose-payfile text-gray-600 leading-relaxed font-medium">
               <p>
-                As a distributed service, PayFile reserves the right to modify its localized high-speed protocol without prior notice to optimize the stability of the Bitcoin settlement engine.
+                As a distributed service, SatoshiBin reserves the right to modify its localized high-speed protocol without prior notice to optimize the stability of the Bitcoin settlement engine.
               </p>
             </div>
           </section>

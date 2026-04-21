@@ -30,9 +30,14 @@ const purchaseSchema = new mongoose.Schema({
   },
   bitcartId: {
     type: String,
-    sparse: true
+    sparse: true,
+    index: true   // Indexed for fast webhook lookups
   },
   bitcartPayoutId: {
+    type: String,
+    sparse: true
+  },
+  adminBitcartPayoutId: {
     type: String,
     sparse: true
   },
@@ -51,18 +56,17 @@ const purchaseSchema = new mongoose.Schema({
   checkoutUrl: {
     type: String
   },
-  createdAt: {
+  // TTL for PENDING-only cleanup: automatically expire invoices that were never paid.
+  // This field is only set for pending purchases; confirmed ones are never deleted.
+  pendingExpiresAt: {
     type: Date,
-    default: Date.now,
-    expires: 3600 * 48, // Tokens expire after 48 hours for security
-    index: true
+    index: { expireAfterSeconds: 0 }  // MongoDB removes when Date is reached
   }
-});
+}, { timestamps: true });   // Adds createdAt + updatedAt automatically
 
-// Compound indexes for common admin queries
+// Compound indexes for common admin/seller queries
 purchaseSchema.index({ seller: 1, status: 1 });
 purchaseSchema.index({ createdAt: -1 });
-
 
 const Purchase = mongoose.model('Purchase', purchaseSchema);
 

@@ -4,17 +4,25 @@ const Purchase = require('../models/Purchase');
 const Settings = require('../models/Settings');
 const Income = require('../models/Income');
 const { generatePDFReport } = require('../utils/reportGenerator');
+const { triggerPurchasePayouts } = require('./purchaseController');
 const fetch = require('node-fetch');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 
 
+// ── Helper: load dynamic commission rate ──────────────────────────────────────
+const getCommissionRate = async () => {
+  const settings = await Settings.findOne();
+  return parseFloat((settings && settings.commissionRate) || process.env.COMMISSION_RATE || 0.05);
+};
 
-// Get Admin Statistics
+// ── Get Admin Statistics ──────────────────────────────────────────────────────
 exports.getStats = catchAsync(async (req, res, next) => {
   const totalUsers = await User.countDocuments();
   
-  // Total Sales (only confirmed ones)
+  // Load dynamic commission rate — NOT hard-coded 0.05
+  const commissionRate = await getCommissionRate();
+  
   const confirmedPurchases = await Purchase.find({ status: 'confirmed' }).populate('sale');
   
   let totalBtcRevenue = 0;
@@ -25,7 +33,7 @@ exports.getStats = catchAsync(async (req, res, next) => {
   confirmedPurchases.forEach(purchase => {
     if (purchase.sale) {
       const price = parseFloat(purchase.sale.price);
-      const commission = price * 0.05;
+      const commission = price * commissionRate;
       if (purchase.sale.currency === 'USDT') {
         totalUsdtRevenue += price;
         totalUsdtCommission += commission;
@@ -44,43 +52,40 @@ exports.getStats = catchAsync(async (req, res, next) => {
       totalBtcRevenue: totalBtcRevenue.toFixed(8),
       totalUsdtRevenue: totalUsdtRevenue.toFixed(2),
       totalBtcCommission: totalBtcCommission.toFixed(8),
-      totalUsdtCommission: totalUsdtCommission.toFixed(2)
+      totalUsdtCommission: totalUsdtCommission.toFixed(2),
+      commissionRate
     }
   });
 });
 
 
-// Get All Users
-exports.getUsers = async (req, res) => {
-  try {
-    const { search } = req.query;
-    let query = {};
-    
-    if (search) {
-      query = {
-        $or: [
-          { email: { $regex: search, $options: 'i' } },
-          { firstName: { $regex: search, $options: 'i' } },
-          { lastName: { $regex: search, $options: 'i' } }
-        ]
-      };
-    }
-
-    const users = await User.find(query).sort('-createdAt');
-    res.status(200).json({
-      status: 'success',
-      results: users.length,
-      data: {
-        users
-      }
-    });
-  } catch (err) {
-    res.status(400).json({ status: 'fail', message: err.message });
+// ── Get All Users ─────────────────────────────────────────────────────────────
+exports.getUsers = catchAsync(async (req, res, next) => {
+  const { search } = req.query;
+  let query = {};
+  
+  if (search) {
+    query = {
+      $or: [
+        { email: { $regex: search, $options: 'i' } },
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } }
+      ]
+    };
   }
-};
 
-// Get Commission History
+  const users = await User.find(query).sort('-createdAt');
+  res.status(200).json({
+    status: 'success',
+    results: users.length,
+    data: { users }
+  });
+});
+
+// ── Get Commission History ────────────────────────────────────────────────────
 exports.getHistory = catchAsync(async (req, res, next) => {
+  const commissionRate = await getCommissionRate();
+
   const history = await Purchase.find({ status: 'confirmed' })
     .populate('sale')
     .populate('seller', 'firstName lastName email')
@@ -89,44 +94,37 @@ exports.getHistory = catchAsync(async (req, res, next) => {
   const formattedHistory = history.map(item => {
     const currency = item.sale ? item.sale.currency : 'BTC';
     const dp = currency === 'BTC' ? 8 : 2;
+    const price = item.sale ? parseFloat(item.sale.price) : 0;
     return {
       id: item._id,
       tokenId: item.tokenId,
       seller: item.seller,
-      price: item.sale ? item.sale.price : 0,
+      price,
       currency,
       network: item.sale ? item.sale.network : '',
-      commission: item.sale ? (item.sale.price * 0.05).toFixed(dp) : 0,
-      date: item.updatedAt
+      commission: (price * commissionRate).toFixed(dp),
+      date: item.updatedAt,
+      payoutsProcessed: item.payoutsProcessed,
+      sellerPayoutProcessed: item.sellerPayoutProcessed,
+      adminPayoutProcessed: item.adminPayoutProcessed,
     };
   });
 
   res.status(200).json({
     status: 'success',
-    data: {
-      history: formattedHistory
-    }
+    data: { history: formattedHistory }
   });
 });
 
 
-// Settings (BTC/USDT Addresses)
-exports.getSettings = async (req, res) => {
-  try {
-    let settings = await Settings.findOne();
-    if (!settings) {
-      settings = await Settings.create({});
-    }
-    res.status(200).json({
-      status: 'success',
-      data: {
-        settings
-      }
-    });
-  } catch (err) {
-    res.status(400).json({ status: 'fail', message: err.message });
+// ── Settings ──────────────────────────────────────────────────────────────────
+exports.getSettings = catchAsync(async (req, res, next) => {
+  let settings = await Settings.findOne();
+  if (!settings) {
+    settings = await Settings.create({});
   }
-};
+  res.status(200).json({ status: 'success', data: { settings } });
+});
 
 exports.updateSettings = catchAsync(async (req, res, next) => {
   const { 
@@ -149,7 +147,7 @@ exports.updateSettings = catchAsync(async (req, res, next) => {
   const BITCART_HOST = process.env.BITCART_HOST;
   const BITCART_API_KEY = process.env.BITCART_API_KEY;
 
-  // Sync function helper
+  // Sync wallet address to Bitcart
   const syncWallet = async (id, address, label) => {
     if (!id || !address || !BITCART_HOST || !BITCART_API_KEY) return;
     try {
@@ -189,214 +187,199 @@ exports.updateSettings = catchAsync(async (req, res, next) => {
   }
 
   // Update other fields
-  if (adminUsdtAddress) settings.adminUsdtAddress = adminUsdtAddress;
-  if (commissionRate !== undefined) settings.commissionRate = commissionRate;
-  if (btcWalletId) settings.btcWalletId = btcWalletId;
-  if (usdtTrc20WalletId) settings.usdtTrc20WalletId = usdtTrc20WalletId;
-  if (usdtErc20WalletId) settings.usdtErc20WalletId = usdtErc20WalletId;
+  if (adminUsdtAddress)    settings.adminUsdtAddress   = adminUsdtAddress;
+  if (commissionRate !== undefined) {
+    const rate = parseFloat(commissionRate);
+    if (isNaN(rate) || rate < 0 || rate > 1) {
+      return next(new AppError('Commission rate must be a number between 0 and 1', 400));
+    }
+    settings.commissionRate = rate;
+  }
+  if (btcWalletId)         settings.btcWalletId        = btcWalletId;
+  if (usdtTrc20WalletId)   settings.usdtTrc20WalletId  = usdtTrc20WalletId;
+  if (usdtErc20WalletId)   settings.usdtErc20WalletId  = usdtErc20WalletId;
   
-  settings.updatedAt = Date.now();
   await settings.save();
 
   res.status(200).json({
     status: 'success',
-    data: {
-      settings,
-      bitcartSync: bitcartChanges
-    }
+    data: { settings, bitcartSync: bitcartChanges }
   });
 });
 
 
-// Get Income Stats for Chart (last 14 days)
-exports.getIncomeStats = async (req, res) => {
-  try {
-    const fourteenDaysAgo = new Date();
-    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+// ── Get Income Stats for Chart (last 14 days) ─────────────────────────────────
+exports.getIncomeStats = catchAsync(async (req, res, next) => {
+  const fourteenDaysAgo = new Date();
+  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
 
-    const stats = await Income.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: fourteenDaysAgo }
-        }
-      },
-      {
-        $group: {
-          _id: {
-            date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-            currency: "$currency"
-          },
-          amount: { $sum: "$amount" }
-        }
-      },
-      {
-        $sort: { "_id.date": 1 }
+  const stats = await Income.aggregate([
+    {
+      $match: { createdAt: { $gte: fourteenDaysAgo } }
+    },
+    {
+      $group: {
+        _id: {
+          date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          currency: '$currency'
+        },
+        amount: { $sum: '$amount' }   // Works correctly because amount is stored as Number
       }
-    ]);
+    },
+    { $sort: { '_id.date': 1 } }
+  ]);
 
-    // Format for frontend grouping by date
-    const formattedStats = {};
-    stats.forEach(item => {
-      const date = item._id.date;
-      if (!formattedStats[date]) {
-        formattedStats[date] = { date, btc: 0, usdt: 0, amount: 0 }; // 'amount' kept for backward compatibility if needed
-      }
-      if (item._id.currency === 'USDT') {
-        formattedStats[date].usdt = parseFloat(item.amount.toFixed(2));
+  // Format for frontend grouping by date
+  const formattedStats = {};
+  stats.forEach(item => {
+    const date = item._id.date;
+    if (!formattedStats[date]) {
+      formattedStats[date] = { date, btc: 0, usdt: 0 };
+    }
+    if (item._id.currency === 'USDT') {
+      formattedStats[date].usdt = parseFloat(item.amount.toFixed(2));
+    } else {
+      formattedStats[date].btc = parseFloat(item.amount.toFixed(8));
+    }
+  });
+
+  res.status(200).json({
+    status: 'success',
+    data: { stats: Object.values(formattedStats) }
+  });
+});
+
+// ── Download PDF Report ───────────────────────────────────────────────────────
+exports.downloadReport = catchAsync(async (req, res, next) => {
+  // Load dynamic commission rate
+  const commissionRate = await getCommissionRate();
+
+  const totalUsers = await User.countDocuments();
+  const confirmedPurchases = await Purchase.find({ status: 'confirmed' }).populate('sale');
+  
+  let totalBtcRevenue = 0;
+  let totalUsdtRevenue = 0;
+  let totalBtcCommission = 0;
+  let totalUsdtCommission = 0;
+  
+  confirmedPurchases.forEach(purchase => {
+    if (purchase.sale) {
+      const price = parseFloat(purchase.sale.price);
+      const commission = price * commissionRate;
+      if (purchase.sale.currency === 'USDT') {
+        totalUsdtRevenue += price;
+        totalUsdtCommission += commission;
       } else {
-        formattedStats[date].btc = parseFloat(item.amount.toFixed(8));
-        formattedStats[date].amount = formattedStats[date].btc; // BTC is default 'amount'
+        totalBtcRevenue += price;
+        totalBtcCommission += commission;
       }
-    });
+    }
+  });
 
-    res.status(200).json({
-      status: 'success',
-      data: {
-        stats: Object.values(formattedStats)
-      }
-    });
-  } catch (err) {
-    res.status(400).json({ status: 'fail', message: err.message });
-  }
-};
+  const stats = {
+    totalUsers,
+    totalSales: confirmedPurchases.length,
+    totalBtcRevenue: totalBtcRevenue.toFixed(8),
+    totalUsdtRevenue: totalUsdtRevenue.toFixed(2),
+    totalBtcCommission: totalBtcCommission.toFixed(8),
+    totalUsdtCommission: totalUsdtCommission.toFixed(2),
+    commissionRate: `${(commissionRate * 100).toFixed(1)}%`
+  };
 
-// Download PDF Report
-exports.downloadReport = async (req, res) => {
-  try {
-    // 1. Get Statistical Summary
-    const totalUsers = await User.countDocuments();
-    const confirmedPurchases = await Purchase.find({ status: 'confirmed' }).populate('sale');
-    
-    let totalBtcRevenue = 0;
-    let totalUsdtRevenue = 0;
-    let totalBtcCommission = 0;
-    let totalUsdtCommission = 0;
-    
-    confirmedPurchases.forEach(purchase => {
-      if (purchase.sale) {
-        const price = parseFloat(purchase.sale.price);
-        const commission = price * 0.05;
-        if (purchase.sale.currency === 'USDT') {
-          totalUsdtRevenue += price;
-          totalUsdtCommission += commission;
-        } else {
-          totalBtcRevenue += price;
-          totalBtcCommission += commission;
-        }
-      }
-    });
+  const historyData = await Purchase.find({ status: 'confirmed' })
+    .populate('sale')
+    .populate('seller', 'firstName lastName email')
+    .sort('-updatedAt');
 
-    const stats = {
-      totalUsers,
-      totalSales: confirmedPurchases.length,
-      totalBtcRevenue: totalBtcRevenue.toFixed(8),
-      totalUsdtRevenue: totalUsdtRevenue.toFixed(2),
-      totalBtcCommission: totalBtcCommission.toFixed(8),
-      totalUsdtCommission: totalUsdtCommission.toFixed(2)
+  const history = historyData.map(item => {
+    const currency = item.sale ? item.sale.currency : 'BTC';
+    const dp = currency === 'BTC' ? 8 : 2;
+    const price = item.sale ? parseFloat(item.sale.price) : 0;
+    return {
+      date: item.updatedAt,
+      tokenId: item.tokenId,
+      seller: item.seller,
+      price,
+      currency,
+      network: item.sale ? item.sale.network : '',
+      commission: (price * commissionRate).toFixed(dp)
     };
+  });
 
-    // 2. Get Transaction Ledger
-    const historyData = await Purchase.find({ status: 'confirmed' })
-      .populate('sale')
-      .populate('seller', 'firstName lastName email')
-      .sort('-updatedAt');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename=satoshibin-report-${new Date().toISOString().split('T')[0]}.pdf`);
 
-    const history = historyData.map(item => {
-      const currency = item.sale ? item.sale.currency : 'BTC';
-      const dp = currency === 'BTC' ? 8 : 2;
-      return {
-        date: item.updatedAt,
-        tokenId: item.tokenId,
-        seller: item.seller,
-        price: item.sale ? item.sale.price : 0,
-        currency,
-        network: item.sale ? item.sale.network : '',
-        commission: item.sale ? (item.sale.price * 0.05).toFixed(dp) : 0
-      };
-    });
+  generatePDFReport({ stats, history }, res);
+});
 
-    // 3. Set Headers and Generate PDF
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=payfile-report-${new Date().toISOString().split('T')[0]}.pdf`);
-
-    generatePDFReport({ stats, history }, res);
-
-  } catch (err) {
-    res.status(400).json({ status: 'fail', message: err.message });
-  }
-};
-
-// Admin Purchase Management
+// ── Admin Purchase Management ─────────────────────────────────────────────────
 exports.verifyPurchaseAdmin = catchAsync(async (req, res, next) => {
   const { tokenId } = req.params;
-  const purchase = await Purchase.findOne({ tokenId }).populate('sale').populate('file').populate('seller', 'firstName lastName email');
+  const purchase = await Purchase.findOne({ tokenId })
+    .populate('sale')
+    .populate('file')
+    .populate('seller', 'firstName lastName email');
   
   if (!purchase) {
     return next(new AppError('Purchase token not found', 404));
   }
 
-  // Smart Sync: If pending, check BitCart API
+  // Smart Sync: If pending, check Bitcart for live status
   if (purchase.status === 'pending' && purchase.bitcartId) {
     const BITCART_HOST = process.env.BITCART_HOST;
     const BITCART_API_KEY = process.env.BITCART_API_KEY;
 
-    const response = await fetch(`${BITCART_HOST}/invoices/${purchase.bitcartId}`, {
-      headers: { 'Authorization': `Bearer ${BITCART_API_KEY}` }
-    });
-    const data = await response.json();
+    if (BITCART_HOST && BITCART_API_KEY) {
+      try {
+        const response = await fetch(`${BITCART_HOST}/invoices/${purchase.bitcartId}`, {
+          headers: { 'Authorization': `Bearer ${BITCART_API_KEY}` }
+        });
+        const data = await response.json();
 
-    if (response.ok && (data.status === 'complete' || data.status === 'paid')) {
-      const dp = (purchase.sale?.currency === 'USDT') ? 2 : 8;
-      purchase.status = 'confirmed';
-      await purchase.save();
+        if (response.ok && (data.status === 'complete' || data.status === 'paid')) {
+          purchase.status = 'confirmed';
+          purchase.pendingExpiresAt = undefined;
+          await purchase.save();
 
-      // Record Income
-      await Income.create({
-        amount: (parseFloat(purchase.sale.price) * 0.05).toFixed(dp),
-        currency: purchase.sale.currency || 'BTC',
-        purchase: purchase._id,
-        tokenId: purchase.tokenId
-      });
+          // Trigger payouts in background
+          triggerPurchasePayouts(purchase._id).catch(e =>
+            console.error('[Admin Verify] Payout error:', e)
+          );
+        }
+      } catch (err) {
+        console.error('[Admin Verify] Bitcart fetch error:', err.message);
+      }
     }
   }
 
-  res.status(200).json({
-    status: 'success',
-    data: { purchase }
-  });
+  res.status(200).json({ status: 'success', data: { purchase } });
 });
 
 
-exports.confirmPurchaseAdmin = async (req, res) => {
-  try {
-    const { tokenId } = req.params;
-    const purchase = await Purchase.findOne({ tokenId }).populate('sale');
-    
-    if (!purchase) {
-      return res.status(404).json({ status: 'fail', message: 'Purchase token not found' });
-    }
-
-    if (purchase.status !== 'confirmed') {
-      purchase.status = 'confirmed';
-      await purchase.save();
-
-      // Record Admin Income
-      if (purchase.sale) {
-        const dp = (purchase.sale.currency === 'USDT') ? 2 : 8;
-        await Income.create({
-          amount: (parseFloat(purchase.sale.price) * 0.05).toFixed(dp),
-          currency: purchase.sale.currency || 'BTC',
-          purchase: purchase._id,
-          tokenId: purchase.tokenId
-        });
-      }
-    }
-
-    res.status(200).json({
-      status: 'success',
-      data: { purchase }
-    });
-  } catch (err) {
-    res.status(400).json({ status: 'fail', message: err.message });
+exports.confirmPurchaseAdmin = catchAsync(async (req, res, next) => {
+  const { tokenId } = req.params;
+  const purchase = await Purchase.findOne({ tokenId }).populate('sale');
+  
+  if (!purchase) {
+    return next(new AppError('Purchase token not found', 404));
   }
-};
+
+  if (purchase.status !== 'confirmed') {
+    purchase.status = 'confirmed';
+    purchase.pendingExpiresAt = undefined;
+    await purchase.save();
+
+    // Trigger payouts — this was missing before and is the root cause of seller
+    // never receiving funds after an admin manual confirm
+    triggerPurchasePayouts(purchase._id).catch(e =>
+      console.error('[Admin Confirm] Payout error:', e)
+    );
+  } else if (!purchase.payoutsProcessed) {
+    // Already confirmed but payouts may have failed — retry
+    triggerPurchasePayouts(purchase._id).catch(e =>
+      console.error('[Admin Confirm] Payout retry error:', e)
+    );
+  }
+
+  res.status(200).json({ status: 'success', data: { purchase } });
+});

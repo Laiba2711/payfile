@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useConfirm } from '../../context/ConfirmContext';
+import axios from 'axios';
+import { useConfirm } from '../context/ConfirmContext.jsx';
+
 
 const useAdminDashboard = () => {
     const confirm = useConfirm();
@@ -47,7 +49,7 @@ const useAdminDashboard = () => {
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const a = document.createElement('a');
             a.href = url;
-            a.download = `payfile-report-${new Date().toISOString().split('T')[0]}.pdf`;
+            a.download = `satoshibin-report-${new Date().toISOString().split('T')[0]}.pdf`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);

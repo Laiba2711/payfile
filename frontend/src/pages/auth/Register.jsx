@@ -38,7 +38,9 @@ const Register = ({ onRegister }) => {
   return (
     <AuthLayout 
       title="Create Account" 
-      subtitle="Join PayFile today to start selling files"
+      subtitle="Join SatoshiBin today to start selling files"
+      image="/auth-register.png"
+      imagePosition="right"
     >
       <form className="space-y-5" onSubmit={handleSubmit}>
         {error && (
@@ -91,8 +93,8 @@ const Register = ({ onRegister }) => {
           </label>
         </div>
 
-        <Button variant="primary" className="w-full py-4 font-black shadow-lg shadow-payfile-amber/20" disabled={loading}>
-          {loading ? 'Registering...' : 'Register'}
+        <Button variant="primary" className="w-full py-4 font-black shadow-lg shadow-payfile-amber/20" loading={loading}>
+          Register
         </Button>
 
         <p className="text-center text-gray-400 text-[10px] font-bold uppercase tracking-widest pt-4">

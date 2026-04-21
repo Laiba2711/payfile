@@ -1,7 +1,24 @@
 node_modules
-.env
-dist
 backend/node_modules
 frontend/node_modules
+
+# Build output
+dist
+frontend/dist
+
+# Environment files — never commit secrets
+.env
+*.env.local
+
+# SSL certificates — never commit private keys
+nginx/certbot/conf/
+nginx/certbot/www/
+
+# Uploaded user files
+backend/uploads/
+
+# OS / Editor
 .DS_Store
 *.log
+.vscode/
+*.bak

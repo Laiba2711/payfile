@@ -6,7 +6,7 @@ const Hero = () => {
   const navigate = useNavigate();
 
   return (
-    <section className="relative pt-32 pb-28 md:pt-52 md:pb-40 overflow-hidden">
+    <section className="relative pt-40 pb-20 md:pt-52 md:pb-40 overflow-hidden">
       {/* Background Image */}
       <div className="absolute inset-0 z-0">
         <img 
@@ -23,30 +23,30 @@ const Hero = () => {
       {/* Content */}
       <div className="max-w-7xl mx-auto px-6 relative z-10 text-center">
         
-        <h1 className="text-5xl md:text-7xl lg:text-8xl font-black mb-8 tracking-tight leading-[1.08] animate-fade-up text-payfile-maroon">
+        <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-black mb-8 tracking-tight leading-[1.1] animate-fade-down text-payfile-maroon">
           Upload, share &amp;{' '}
           <span className="shimmer-text">sell</span>{' '}
-          <br className="hidden md:block" />
+          <br className="hidden sm:block" />
           files via Bitcoin
         </h1>
 
-        <p className="max-w-2xl mx-auto text-xl text-gray-600 mb-12 leading-relaxed animate-fade-up-delay-1">
+        <p className="max-w-2xl mx-auto text-lg md:text-xl text-gray-600 mb-10 leading-relaxed animate-fade-up">
           Decentralized file storage and Bitcoin marketplace on the{' '}
           <br className="hidden md:block" />
           Distributed High-Speed Network.
         </p>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-up-delay-2">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-up">
           <Button
             variant="primary"
-            className="w-full sm:w-auto px-10 py-4 text-lg glow-gold"
+            className="w-full sm:w-auto px-10 py-4 text-lg glow-gold font-black shadow-xl"
             onClick={() => navigate('/login')}
           >
             Get Started
           </Button>
           <Button 
             variant="secondary" 
-            className="w-full sm:w-auto px-10 py-4 text-lg"
+            className="w-full sm:w-auto px-10 py-4 text-lg font-black"
             onClick={() => {
               document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
             }}
@@ -55,16 +55,16 @@ const Hero = () => {
           </Button>
         </div>
 
-        {/* Stats row */}
-        <div className="mt-20 grid grid-cols-3 gap-6 max-w-lg mx-auto animate-fade-up-delay-2">
+        {/* Stats row - Optimized for mobile */}
+        <div className="mt-16 flex flex-wrap items-center justify-center gap-x-8 gap-y-6 md:gap-12 max-w-2xl mx-auto animate-fade-up">
           {[
             { value: '100%', label: 'Decentralized' },
             { value: '₿', label: 'Bitcoin Native' },
             { value: 'E2E', label: 'Encrypted' },
           ].map((stat) => (
-            <div key={stat.label} className="text-center">
-              <div className="text-2xl font-bold text-gradient-gold">{stat.value}</div>
-              <div className="text-xs text-gray-400 mt-1 uppercase tracking-widest font-bold">{stat.label}</div>
+            <div key={stat.label} className="text-center min-w-[80px]">
+              <div className="text-xl md:text-2xl font-black text-payfile-gold drop-shadow-sm">{stat.value}</div>
+              <div className="text-[9px] md:text-xs text-gray-400 mt-1 uppercase tracking-[0.2em] font-black">{stat.label}</div>
             </div>
           ))}
         </div>

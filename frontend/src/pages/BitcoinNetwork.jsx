@@ -17,7 +17,7 @@ const BitcoinNetwork = () => {
             The Speed of <br/><span className="text-payfile-gold">True Settlement.</span>
           </h1>
           <p className="text-gray-500 font-medium max-w-2xl mx-auto text-xl leading-relaxed mb-12 animate-fade-up-delay-1">
-            PayFile is built on the most secure financial protocol on Earth. Discover how our distributed nodes enable near-instant digital content monetization.
+            SatoshiBin is built on the most secure financial protocol on Earth. Discover how our distributed nodes enable near-instant digital content monetization.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-6 animate-fade-up-delay-1">
             <a href="/register">
@@ -35,7 +35,7 @@ const BitcoinNetwork = () => {
               <Zap className="w-12 h-12 text-payfile-gold mb-8" />
               <h3 className="text-2xl font-black text-payfile-maroon mb-4 tracking-tight">Instant Invoicing</h3>
               <p className="text-gray-500 font-medium leading-relaxed">
-                Localized settlement ensures that Bitcoin invoices are generated and confirmed via the lightning-capable PayFile Node network in seconds.
+                Localized settlement ensures that Bitcoin invoices are generated and confirmed via the lightning-capable SatoshiBin Node network in seconds.
               </p>
             </div>
             <div className="p-10 rounded-[40px] bg-white border border-payfile-maroon/5 card-hover shadow-xl shadow-payfile-maroon/5">
@@ -88,7 +88,7 @@ const BitcoinNetwork = () => {
               </h2>
               <div className="space-y-6 text-gray-500 font-medium text-lg leading-relaxed">
                 <p>
-                  Built on the principle of peer-to-peer electronic cash, PayFile eliminates the middlemen. Every file sold is a direct interaction between creator and consumer.
+                  Built on the principle of peer-to-peer electronic cash, SatoshiBin eliminates the middlemen. Every file sold is a direct interaction between creator and consumer.
                 </p>
                 <div className="flex items-start gap-4 p-6 bg-payfile-cream rounded-3xl border border-payfile-gold/20">
                     <Cpu className="w-6 h-6 text-payfile-maroon mt-1 shrink-0" />
@@ -109,7 +109,7 @@ const BitcoinNetwork = () => {
             <div className="relative z-10">
                 <h2 className="text-4xl md:text-5xl font-black text-payfile-maroon mb-8">Ready to join the network?</h2>
                 <p className="text-gray-600 font-medium mb-10 max-w-lg mx-auto">
-                    Take control of your content and your payments. Open your PayFile store in under 2 minutes.
+                    Take control of your content and your payments. Open your SatoshiBin store in under 2 minutes.
                 </p>
                 <div className="flex flex-wrap justify-center gap-6">
                     <a href="/register">

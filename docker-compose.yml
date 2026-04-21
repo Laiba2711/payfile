@@ -1,32 +1,110 @@
 services:
-  # ─── MongoDB Database (Payfile) ───────────────────────────────────────────
-  mongodb:
-    image: mongo:latest
-    container_name: payfile_mongodb
+
+  # ─── Public-facing Nginx Reverse Proxy ─────────────────────────────────────
+  nginx:
+    build:
+      context: ./nginx
+    container_name: payfile_nginx
+    restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
     volumes:
-      - payfile_db_data:/data/db
+      - ./nginx/certbot/conf:/etc/letsencrypt:ro
+      - ./nginx/certbot/www:/var/www/certbot:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
     networks:
       - payfile_net
 
-  # ─── Bitcart PostgreSQL ───────────────────────────────────────────────────
+  # ─── Let's Encrypt Certificate Auto-renewal ────────────────────────────────
+  certbot:
+    image: certbot/certbot:latest
+    container_name: payfile_certbot
+    restart: unless-stopped
+    volumes:
+      - ./nginx/certbot/conf:/etc/letsencrypt
+      - ./nginx/certbot/www:/var/www/certbot
+    # Renew twice daily (Let's Encrypt certs expire every 90 days)
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done;'"
+    networks:
+      - payfile_net
+
+  # ─── React Frontend (Nginx serving built static files) ────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: payfile_frontend
+    restart: unless-stopped
+    # No external ports — only nginx can reach this
+    networks:
+      - payfile_net
+
+  # ─── Node.js                              Backend API ───────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: payfile_backend
+    command: node server.js
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - payfile_net
+    # No external ports — only accessible via nginx proxy
+
+  # ─── MongoDB Database ───────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7-jammy
+    container_name: payfile_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: payfile
+    volumes:
+      - payfile_db_data:/data/db
+    # No external ports — security hardening
+    networks:
+      - payfile_net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ─── Bitcart PostgreSQL ─────────────────────────────────────────────────────
   bitcart_postgres:
-    image: postgres:13-alpine
+    image: postgres:15-alpine
     container_name: bitcart_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: bitcart
-      POSTGRES_USER: bitcart
-      POSTGRES_PASSWORD: bitcart_pass
+      POSTGRES_DB:       bitcart
+      POSTGRES_USER:     bitcart
+      POSTGRES_PASSWORD: ${BITCART_DB_PASSWORD:-bitcart_secure_pass}
     volumes:
       - bitcart_postgres_data:/var/lib/postgresql/data
     networks:
       payfile_net:
         aliases:
           - postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bitcart"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # ─── Bitcart Redis ────────────────────────────────────────────────────────
+  # ─── Bitcart Redis ──────────────────────────────────────────────────────────
   bitcart_redis:
     image: redis:7-alpine
     container_name: bitcart_redis
@@ -36,14 +114,14 @@ services:
         aliases:
           - redis
 
-  # ─── Bitcart BTC Daemon ───────────────────────────────────────────────────
+  # ─── Bitcart BTC Daemon ─────────────────────────────────────────────────────
   bitcart_btc:
     image: bitcart/bitcart-btc:stable
     container_name: bitcart_btc
     restart: unless-stopped
     environment:
-      BTC_NETWORK: testnet
-      BTC_LIGHTNING: "false"
+      BTC_NETWORK:    mainnet
+      BTC_LIGHTNING:  "false"
     volumes:
       - bitcart_btc_data:/data
     networks:
@@ -51,13 +129,13 @@ services:
         aliases:
           - btc
 
-  # ─── Bitcart ETH Daemon ───────────────────────────────────────────────────
+  # ─── Bitcart ETH Daemon ─────────────────────────────────────────────────────
   bitcart_eth:
     image: bitcart/bitcart-eth:stable
     container_name: bitcart_eth
     restart: unless-stopped
     environment:
-      ETH_NETWORK: rinkeby
+      ETH_NETWORK: mainnet
     volumes:
       - bitcart_eth_data:/data
     networks:
@@ -65,13 +143,13 @@ services:
         aliases:
           - eth
 
-  # ─── Bitcart TRX Daemon ───────────────────────────────────────────────────
+  # ─── Bitcart TRX Daemon ─────────────────────────────────────────────────────
   bitcart_trx:
     image: bitcart/bitcart-trx:stable
     container_name: bitcart_trx
     restart: unless-stopped
     environment:
-      TRX_NETWORK: testnet
+      TRX_NETWORK: mainnet
     volumes:
       - bitcart_trx_data:/data
     networks:
@@ -79,85 +157,87 @@ services:
         aliases:
           - trx
 
-  # ─── Bitcart Permission fixer ─────────────────────────────────────────────
+  # ─── Bitcart Permission Init ─────────────────────────────────────────────────
   bitcart_api_init:
     image: alpine:latest
     container_name: bitcart_api_init
     user: root
     volumes:
       - bitcart_app_data:/app/data
+    command: chown -R 1000:1000 /app/data
     networks:
       - payfile_net
-    command: chown -R 1000:1000 /app/data
 
-  # ─── Bitcart Backend API ──────────────────────────────────────────────────
+  # ─── Bitcart Backend API ────────────────────────────────────────────────────
   bitcart_api:
     image: bitcart/bitcart:stable
     container_name: bitcart_api
     restart: unless-stopped
     depends_on:
-      - bitcart_postgres
-      - bitcart_redis
-      - bitcart_btc
-      - bitcart_eth
-      - bitcart_trx
-      - bitcart_api_init
+      bitcart_postgres:
+        condition: service_healthy
+      bitcart_redis:
+        condition: service_started
+      bitcart_btc:
+        condition: service_started
+      bitcart_eth:
+        condition: service_started
+      bitcart_trx:
+        condition: service_started
+      bitcart_api_init:
+        condition: service_completed_successfully
     user: root
     command: sh -c "/app/.venv/bin/alembic upgrade head && gunicorn -c gunicorn.conf.py main:app"
     environment:
-      BITCART_DEBUG: "true"
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      DB_DATABASE: bitcart
-      DB_USER: bitcart
-      DB_PASSWORD: bitcart_pass
-      REDIS_HOST: redis://redis
+      BITCART_DEBUG:   "false"
+      DB_HOST:         postgres
+      DB_PORT:         "5432"
+      DB_DATABASE:     bitcart
+      DB_USER:         bitcart
+      DB_PASSWORD:     ${BITCART_DB_PASSWORD:-bitcart_secure_pass}
+      REDIS_HOST:      redis://redis
       BITCART_CRYPTOS: btc,eth,trx
-      BTC_HOST: btc
-      BTC_PORT: "5000"
-      BTC_NETWORK: testnet
-    ports:
-      - "8000:8000"
+      BTC_HOST:        btc
+      BTC_PORT:        "5000"
+      BTC_NETWORK:     mainnet
+    # Port 8000 internal only — backend connects via Docker network
     volumes:
       - bitcart_app_data:/app/data
     networks:
       - payfile_net
     healthcheck:
-      test: [ "CMD-SHELL", "python3 -c 'import socket; s = socket.socket(); s.connect((\"localhost\", 8000))'" ]
-      interval: 5s
+      test: ["CMD-SHELL", "python3 -c 'import socket; s=socket.socket(); s.connect((\"localhost\",8000))'"]
+      interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 60s
 
-  # ─── Bitcart Worker ───────────────────────────────────────────────────────
+  # ─── Bitcart Worker ─────────────────────────────────────────────────────────
   bitcart_worker:
     image: bitcart/bitcart:stable
     container_name: bitcart_worker
     restart: unless-stopped
     depends_on:
-      - bitcart_postgres
-      - bitcart_redis
-      - bitcart_btc
-      - bitcart_eth
-      - bitcart_trx
-      - bitcart_api_init
+      bitcart_api:
+        condition: service_healthy
     command: python worker.py
     environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      DB_DATABASE: bitcart
-      DB_USER: bitcart
-      DB_PASSWORD: bitcart_pass
-      REDIS_HOST: redis://redis
+      DB_HOST:         postgres
+      DB_PORT:         "5432"
+      DB_DATABASE:     bitcart
+      DB_USER:         bitcart
+      DB_PASSWORD:     ${BITCART_DB_PASSWORD:-bitcart_secure_pass}
+      REDIS_HOST:      redis://redis
       BITCART_CRYPTOS: btc,eth,trx
-      BTC_HOST: btc
-      BTC_PORT: "5000"
-      BTC_NETWORK: testnet
+      BTC_HOST:        btc
+      BTC_PORT:        "5000"
+      BTC_NETWORK:     mainnet
     volumes:
       - bitcart_app_data:/app/data
     networks:
       - payfile_net
 
-  # ─── Bitcart Admin Dashboard ──────────────────────────────────────────────
+  # ─── Bitcart Admin Dashboard (internal tool) ────────────────────────────────
   bitcart_admin:
     image: bitcart/bitcart-admin:stable
     container_name: bitcart_admin
@@ -167,60 +247,27 @@ services:
         condition: service_healthy
     command: yarn start
     environment:
-      BITCART_ADMIN_API_URL: http://localhost:8000
+      BITCART_ADMIN_API_URL:        http://localhost:8000
       BITCART_ADMIN_SERVER_API_URL: http://bitcart_api:8000
-      BITCART_ADMIN_URL: http://localhost:4000
-      API_URL: http://bitcart_api:8000
-      API_URL_BROWSER: http://localhost:8000
-      NUXT_HOST: 0.0.0.0
-      NUXT_PORT: "4000"
+      BITCART_ADMIN_URL:            http://localhost:4000
+      API_URL:                      http://bitcart_api:8000
+      API_URL_BROWSER:              http://localhost:8000
+      NUXT_HOST:                    0.0.0.0
+      NUXT_PORT:                    "4000"
+    # Port 4000 exposed only on localhost — not public-facing
     ports:
-      - "4000:4000"
-    networks:
-      - payfile_net
-
-  # ─── Payfile Backend ──────────────────────────────────────────────────────
-  backend:
-    build:
-      context: ./backend
-    container_name: payfile_backend
-    command: npm run dev
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
-    ports:
-      - "5000:5000"
-    env_file: .env
-    depends_on:
-      - mongodb
-      - bitcart_api
-    networks:
-      - payfile_net
-
-  # ─── Payfile Frontend ─────────────────────────────────────────────────────
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.dev
-    container_name: payfile_frontend
-    ports:
-      - "5174:5173"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    depends_on:
-      - backend
+      - "127.0.0.1:4000:4000"
     networks:
       - payfile_net
 
 volumes:
   payfile_db_data:
+  uploads_data:
   bitcart_postgres_data:
   bitcart_btc_data:
   bitcart_eth_data:
   bitcart_trx_data:
   bitcart_app_data:
-
 
 networks:
   payfile_net:

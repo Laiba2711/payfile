@@ -107,20 +107,20 @@ exports.forgotPassword = catchAsync(async (req, res, next) => {
   const message = `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
       <h2 style="color: #430101;">Password Reset Request</h2>
-      <p>You requested a password reset for your PayFile account. Click the button below to set a new password:</p>
+      <p>You requested a password reset for your SatoshiBin account. Click the button below to set a new password:</p>
       <div style="text-align: center; margin: 30px 0;">
         <a href="${resetURL}" style="background-color: #430101; color: #D4AF37; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">Reset Password</a>
       </div>
       <p style="color: #666; font-size: 12px;">This link will expire in 10 minutes. If you didn't request this, please ignore this email.</p>
       <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
-      <p style="color: #999; font-size: 10px;">Sent from PayFile Secure Storage</p>
+      <p style="color: #999; font-size: 10px;">Sent from SatoshiBin Secure Storage</p>
     </div>
   `;
 
   try {
     await sendEmail({
       email: user.email,
-      subject: 'PayFile - Password Reset (Valid for 10 min)',
+      subject: 'SatoshiBin - Password Reset (Valid for 10 min)',
       message,
     });
 

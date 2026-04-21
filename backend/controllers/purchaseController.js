@@ -8,8 +8,21 @@ const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ── Bitcart currency code mapping ────────────────────────────────────────────
+// Bitcart uses its own currency codes that differ from our internal names.
+// BTC → 'BTC' | USDT TRC20 → 'USDTTRX' | USDT ERC20 → 'USDTETH'
+// ─────────────────────────────────────────────────────────────────────────────
+const getBitcartCurrencyCode = (currency, network) => {
+  if (currency === 'BTC') return 'BTC';
+  if (currency === 'USDT') {
+    if (network === 'ERC20') return 'USDTETH';
+    return 'USDTTRX'; // Default USDT to TRC20
+  }
+  return currency; // Passthrough for any future currencies
+};
 
-// ── Helper: load settings with fallback, env always overrides for addresses ─
+// ── Helper: load settings with fallback, env always overrides for addresses ──
 const loadSettings = async () => {
   const db = await Settings.findOne();
   return {
@@ -20,9 +33,9 @@ const loadSettings = async () => {
     adminUsdtErc20Address: process.env.ADMIN_USDT_ERC20_ADDRESS || (db && db.adminUsdtErc20Address)  || '',
     commissionRate:        (db && db.commissionRate) || 0.05,
     // Bitcart wallet IDs per currency
-    btcWalletId:           process.env.BITCART_WALLET_ID             || '',
-    usdtTrc20WalletId:     process.env.BITCART_USDT_TRC20_WALLET_ID  || '',
-    usdtErc20WalletId:     process.env.BITCART_USDT_ERC20_WALLET_ID  || '',
+    btcWalletId:           process.env.BITCART_WALLET_ID             || (db && db.btcWalletId)           || '',
+    usdtTrc20WalletId:     process.env.BITCART_USDT_TRC20_WALLET_ID  || (db && db.usdtTrc20WalletId)     || '',
+    usdtErc20WalletId:     process.env.BITCART_USDT_ERC20_WALLET_ID  || (db && db.usdtErc20WalletId)     || '',
   };
 };
 
@@ -41,7 +54,7 @@ exports.createPurchase = catchAsync(async (req, res, next) => {
   const BITCART_STORE_ID = process.env.BITCART_STORE_ID;
 
   if (!BITCART_HOST || !BITCART_API_KEY || !BITCART_STORE_ID) {
-    return next(new AppError('Bitcart not configured on server', 500));
+    return next(new AppError('Payment system not configured on server', 500));
   }
 
   // Load commission rate from admin settings (supports dynamic rate)
@@ -62,17 +75,20 @@ exports.createPurchase = catchAsync(async (req, res, next) => {
       : settings.usdtTrc20WalletId;
   }
 
-  // Map currency+network to Bitcart currency code
-  const bitcartCurrency = sale.currency === 'USDT'
-    ? (sale.network === 'ERC20' ? 'USDT' : 'USDTTRX')
-    : 'BTC';
+  // Map currency+network to Bitcart-specific currency code
+  // BTC → 'BTC' | USDT ERC20 → 'USDTETH' | USDT TRC20 → 'USDTTRX'
+  const bitcartCurrency = getBitcartCurrencyCode(sale.currency, sale.network);
+
+  // Build the backend URL for the webhook — prefer env var over runtime detection
+  // (runtime detection breaks behind reverse proxies)
+  const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
 
   // Create Bitcart invoice for the TOTAL amount (buyer pays seller + commission)
   const invoiceBody = {
     price:            totalAmount,
     store_id:         BITCART_STORE_ID,
     order_id:         saleId,
-    notification_url: `${process.env.BACKEND_URL || req.protocol + '://' + req.get('host')}/api/purchases/bitcart-webhook`,
+    notification_url: `${backendUrl}/api/purchases/bitcart-webhook`,
     currency:         bitcartCurrency,
   };
   // Attach wallet if we have one configured
@@ -89,11 +105,14 @@ exports.createPurchase = catchAsync(async (req, res, next) => {
 
   const data = await response.json();
   if (!response.ok) {
-    return next(new AppError(data.detail || 'Failed to create Bitcart invoice', 400));
+    return next(new AppError(data.detail || 'Failed to create payment invoice', 400));
   }
 
   // Internal token for this purchase
   const tokenId = 'PAY-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+
+  // pendingExpiresAt: auto-clean abandoned invoices after 48 hours (TTL on model)
+  const pendingExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
   const purchase = await Purchase.create({
     tokenId,
@@ -102,7 +121,8 @@ exports.createPurchase = catchAsync(async (req, res, next) => {
     seller:      sale.seller,
     status:      'pending',
     bitcartId:   data.id,
-    checkoutUrl: `/checkout/${tokenId}`
+    checkoutUrl: `/checkout/${tokenId}`,
+    pendingExpiresAt,
   });
 
   res.status(201).json({
@@ -113,17 +133,13 @@ exports.createPurchase = catchAsync(async (req, res, next) => {
 
 
 // ── GET /api/purchases/status/:tokenId ───────────────────────────────────────
-exports.getPurchaseStatus = async (req, res) => {
-  try {
-    const purchase = await Purchase.findOne({ tokenId: req.params.tokenId });
-    if (!purchase) {
-      return res.status(404).json({ status: 'fail', message: 'Purchase token not found' });
-    }
-    res.status(200).json({ status: 'success', data: { status: purchase.status } });
-  } catch (err) {
-    res.status(400).json({ status: 'fail', message: err.message });
+exports.getPurchaseStatus = catchAsync(async (req, res, next) => {
+  const purchase = await Purchase.findOne({ tokenId: req.params.tokenId });
+  if (!purchase) {
+    return next(new AppError('Purchase token not found', 404));
   }
-};
+  res.status(200).json({ status: 'success', data: { status: purchase.status } });
+});
 
 // ── GET /api/purchases/verify/:tokenId (seller) ──────────────────────────────
 exports.getPurchaseDetailsForSeller = catchAsync(async (req, res, next) => {
@@ -140,49 +156,55 @@ exports.getPurchaseDetailsForSeller = catchAsync(async (req, res, next) => {
 
 
 // ── PATCH /api/purchases/confirm/:tokenId (seller manual confirm) ─────────────
-exports.confirmPurchase = async (req, res) => {
-  try {
-    const purchase = await Purchase.findOneAndUpdate(
-      { tokenId: req.params.tokenId, seller: req.user.id },
-      { status: 'confirmed' },
-      { new: true }
-    );
+exports.confirmPurchase = catchAsync(async (req, res, next) => {
+  const purchase = await Purchase.findOneAndUpdate(
+    { tokenId: req.params.tokenId, seller: req.user.id },
+    { status: 'confirmed' },
+    { new: true }
+  );
 
-    if (!purchase) {
-      return res.status(404).json({ status: 'fail', message: 'Token not found or unauthorized' });
-    }
-
-    // Record admin income (5% commission)
-    const sale     = await Sale.findById(purchase.sale);
-    const settings = await loadSettings();
-    const rate     = parseFloat(settings.commissionRate) || 0.05;
-    if (sale) {
-      await Income.create({
-        amount:   (parseFloat(sale.price) * rate).toFixed(8),
-        currency: sale.currency || 'BTC',
-        purchase: purchase._id,
-        tokenId:  purchase.tokenId
-      });
-    }
-
-    res.status(200).json({ status: 'success', data: { purchase } });
-  } catch (err) {
-    res.status(400).json({ status: 'fail', message: err.message });
+  if (!purchase) {
+    return next(new AppError('Token not found or unauthorized', 404));
   }
-};
+
+  // Trigger payouts in background (idempotent — won't double-pay)
+  triggerPurchasePayouts(purchase._id).catch(e => console.error('Payout trigger error:', e));
+
+  res.status(200).json({ status: 'success', data: { purchase } });
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ── Shared payout helper ──────────────────────────────────────────────────────
-// Creates a Bitcart payout. Reads all config from env — no extra API calls.
-// Returns { ok: true, payoutId, status } or { ok: false, error }.
+// Creates a Bitcart payout. Returns { ok: true, payoutId, status } or { ok: false, error }.
 // ─────────────────────────────────────────────────────────────────────────────
-const createBitcartPayout = async ({ amount, currency, destination, walletId }) => {
+// ── createBitcartPayout ────────────────────────────────────────────────────────
+// currency must be a Bitcart-specific code: 'BTC', 'USDTTRX', or 'USDTETH'
+// DO NOT pass 'USDT' directly — Bitcart will reject it.
+const createBitcartPayout = async ({ amount, bitcartCurrency, destination, walletId }) => {
   const BITCART_HOST     = process.env.BITCART_HOST;
   const BITCART_API_KEY  = process.env.BITCART_API_KEY;
   const BITCART_STORE_ID = process.env.BITCART_STORE_ID;
   const resolvedWallet   = walletId || process.env.BITCART_WALLET_ID;
 
-  console.log(`[Payout] ${amount} ${currency} → ${destination} (wallet: ${resolvedWallet})`);
+  if (!BITCART_HOST || !BITCART_API_KEY || !BITCART_STORE_ID) {
+    return { ok: false, error: 'Bitcart not configured (missing HOST/API_KEY/STORE_ID)' };
+  }
+  if (!resolvedWallet) {
+    return { ok: false, error: 'No wallet ID available for payout' };
+  }
+  if (!destination) {
+    return { ok: false, error: 'No destination address for payout' };
+  }
+
+  console.log(`[Payout] ${amount} ${bitcartCurrency} → ${destination} (wallet: ${resolvedWallet})`);
+
+  const payoutBody = {
+    amount:      amount,
+    currency:    bitcartCurrency,
+    destination: destination,
+    store_id:    BITCART_STORE_ID,
+    wallet_id:   resolvedWallet
+  };
 
   const res = await fetch(`${BITCART_HOST}/payouts`, {
     method: 'POST',
@@ -190,25 +212,21 @@ const createBitcartPayout = async ({ amount, currency, destination, walletId }) 
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${BITCART_API_KEY}`
     },
-    body: JSON.stringify({
-      amount,
-      currency:    currency || 'BTC',
-      destination,
-      store_id:    BITCART_STORE_ID,
-      wallet_id:   resolvedWallet
-    })
+    body: JSON.stringify(payoutBody)
   });
 
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    return { ok: false, error: JSON.stringify(data) };
+    const errMsg = data.detail || data.message || JSON.stringify(data);
+    return { ok: false, error: errMsg };
   }
   return { ok: true, payoutId: data.id, status: data.status };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ── Shared payout trigger ─────────────────────────────────────────────────────
-// Called when a purchase is confirmed (via webhook or polling auto-sync).
+// Called when a purchase is confirmed (via webhook, polling, or manual admin confirm).
+// Fully idempotent — checks each flag before creating a payout.
 // ─────────────────────────────────────────────────────────────────────────────
 const triggerPurchasePayouts = async (purchaseId) => {
   try {
@@ -224,11 +242,11 @@ const triggerPurchasePayouts = async (purchaseId) => {
     const sale             = purchase.sale;
     const settings         = await loadSettings();
     const commissionRate   = parseFloat(settings.commissionRate) || 0.05;
-    const dp               = sale.currency === 'BTC' ? 8 : 2;
-    const sellerAmount     = parseFloat(sale.price);
-    const commissionAmount = parseFloat((sellerAmount * commissionRate).toFixed(dp));
     const currency         = sale.currency || 'BTC';
     const network          = sale.network  || '';
+    const dp               = currency === 'BTC' ? 8 : 2;
+    const sellerAmount     = parseFloat(sale.price);
+    const commissionAmount = parseFloat((sellerAmount * commissionRate).toFixed(dp));
 
     // Determine correct wallet ID for this currency+network
     let walletId = settings.btcWalletId;
@@ -241,23 +259,28 @@ const triggerPurchasePayouts = async (purchaseId) => {
       return;
     }
 
-    console.log(`🚀 [Payouts][${purchase.tokenId}] Beginning split distribution (${currency})`);
+    // Map our internal currency/network to Bitcart's currency code ONCE here
+    const bitcartCurrencyCode = getBitcartCurrencyCode(currency, network);
+
+    console.log(`🚀 [Payouts][${purchase.tokenId}] Split distribution: ${sellerAmount} + ${commissionAmount} ${bitcartCurrencyCode}`);
     
     // ── PAYOUT 1: SELLER ──────────────────────────────────────────────
     let sellerPayoutOk = purchase.sellerPayoutProcessed;
     if (!sellerPayoutOk) {
       if (sale.address) {
-        console.log(`   [Payouts][${purchase.tokenId}] Distributing to Seller...`);
+        console.log(`   [Payouts][${purchase.tokenId}] → Seller: ${sellerAmount} ${bitcartCurrencyCode} to ${sale.address}`);
         const sellerPayout = await createBitcartPayout({
-          amount:      sellerAmount,
-          currency,
-          destination: sale.address,
+          amount:          sellerAmount,
+          bitcartCurrency: bitcartCurrencyCode,
+          destination:     sale.address,
           walletId
         });
         sellerPayoutOk = sellerPayout.ok;
         if (sellerPayoutOk) {
           purchase.sellerPayoutProcessed = true;
           purchase.bitcartPayoutId = sellerPayout.payoutId;
+          // Clear pendingExpiresAt so TTL won't delete this confirmed purchase
+          purchase.pendingExpiresAt = undefined;
           await purchase.save();
           console.log(`✅ [Payouts][${purchase.tokenId}] SELLER Payout Success | ${sellerAmount} ${currency} → ${sale.address}`);
         } else {
@@ -265,8 +288,8 @@ const triggerPurchasePayouts = async (purchaseId) => {
         }
       } else {
         console.warn(`⚠️  [Payouts][${purchase.tokenId}] SKIPPED Seller Payout (No address set by seller)`);
-        // We consider it "processed" if there's no address to send to, to avoid infinite retries
         purchase.sellerPayoutProcessed = true;
+        purchase.pendingExpiresAt = undefined;
         await purchase.save();
       }
     }
@@ -284,22 +307,24 @@ const triggerPurchasePayouts = async (purchaseId) => {
       }
 
       if (adminAddress) {
-        console.log(`   [Payouts][${purchase.tokenId}] Distributing to Admin...`);
+        console.log(`   [Payouts][${purchase.tokenId}] → Admin: ${commissionAmount} ${bitcartCurrencyCode} to ${adminAddress}`);
         const adminPayout = await createBitcartPayout({
-          amount:      commissionAmount,
-          currency,
-          destination: adminAddress,
+          amount:          commissionAmount,
+          bitcartCurrency: bitcartCurrencyCode,
+          destination:     adminAddress,
           walletId
         });
         adminPayoutOk = adminPayout.ok;
         if (adminPayoutOk) {
           purchase.adminPayoutProcessed = true;
+          purchase.adminBitcartPayoutId = adminPayout.payoutId;
+          purchase.pendingExpiresAt = undefined;
           await purchase.save();
-          console.log(`✅ [Payouts][${purchase.tokenId}] ADMIN Payout Success  | ${commissionAmount} ${currency} → ${adminAddress}`);
+          console.log(`✅ [Payouts][${purchase.tokenId}] ADMIN Payout Success  | ${commissionAmount} ${bitcartCurrencyCode} → ${adminAddress}`);
           
-          // Record income stats
+          // Record income stats — store as Number (not string) for aggregation
           await Income.create({
-            amount:      commissionAmount.toFixed(dp),
+            amount:      parseFloat(commissionAmount.toFixed(dp)),
             currency,
             purchase:    purchase._id,
             tokenId:     purchase.tokenId,
@@ -317,6 +342,7 @@ const triggerPurchasePayouts = async (purchaseId) => {
     // Final mark as atomic success
     if (purchase.sellerPayoutProcessed && purchase.adminPayoutProcessed) {
       purchase.payoutsProcessed = true;
+      purchase.pendingExpiresAt = undefined;
       await purchase.save();
       console.log(`🎉 [Payouts][${purchase.tokenId}] Order fully processed.`);
     }
@@ -324,6 +350,48 @@ const triggerPurchasePayouts = async (purchaseId) => {
   } catch (err) {
     console.error('❌ [Payouts] Fatal error in triggerPurchasePayouts:', err.message);
   }
+};
+
+// Export for use in adminController
+exports.triggerPurchasePayouts = triggerPurchasePayouts;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ── Background Payout Retry Job ───────────────────────────────────────────────
+// Runs every 5 minutes to catch any confirmed purchases whose payouts failed
+// (e.g., Bitcart was temporarily down at time of confirmation).
+// This is the safety net — the system should self-heal without admin intervention.
+// ─────────────────────────────────────────────────────────────────────────────
+exports.startPayoutRetryJob = () => {
+  const INTERVAL_MS = 5 * 60 * 1000; // Every 5 minutes
+
+  const runRetryPass = async () => {
+    try {
+      // Find confirmed purchases that haven't had their payouts fully processed
+      const stalePurchases = await Purchase.find({
+        status:           'confirmed',
+        payoutsProcessed: false,
+        // Only retry if last update was more than 2 minutes ago (avoids racing a fresh trigger)
+        updatedAt: { $lt: new Date(Date.now() - 2 * 60 * 1000) }
+      }).limit(20);
+
+      if (stalePurchases.length > 0) {
+        console.log(`[PayoutRetry] 🔄 Found ${stalePurchases.length} unprocessed confirmed purchase(s). Retrying...`);
+        for (const purchase of stalePurchases) {
+          await triggerPurchasePayouts(purchase._id);
+        }
+      }
+    } catch (err) {
+      console.error('[PayoutRetry] Error during retry pass:', err.message);
+    }
+  };
+
+  // Run first pass after 60s (allow server to fully start), then every INTERVAL_MS
+  setTimeout(() => {
+    runRetryPass();
+    setInterval(runRetryPass, INTERVAL_MS);
+  }, 60 * 1000);
+
+  console.log('⏰ [PayoutRetry] Background retry job started (runs every 5 min)');
 };
 
 // ── ADMIN: POST /api/purchases/retry-payout/:tokenId ─────────────────────────
@@ -359,16 +427,21 @@ exports.retryPayout = catchAsync(async (req, res, next) => {
 
 // ── POST /api/purchases/bitcart-webhook ──────────────────────────────────────
 // Called by Bitcart when an invoice status changes.
+// Raw body is captured by express.raw() in server.js before global express.json()
 exports.handleBitCartWebhook = async (req, res) => {
   try {
-    const { id, status } = req.body;
+    // req.body is a Buffer here (raw bytes from express.raw middleware)
+    const rawBody = req.body;
     const signature = req.headers['x-bitcart-signature-256'];
     const secret = process.env.BITCART_WEBHOOK_SECRET;
 
     // ── Security Verification ────────────────────────────────────────────────
     if (secret && signature) {
       const hmac = crypto.createHmac('sha256', secret);
-      const digest = Buffer.from(hmac.update(JSON.stringify(req.body)).digest('hex'), 'utf8');
+      const digest = Buffer.from(
+        hmac.update(rawBody).digest('hex'),  // rawBody is the raw Buffer — matches exactly what Bitcart signed
+        'utf8'
+      );
       const checksum = Buffer.from(signature, 'utf8');
 
       if (checksum.length !== digest.length || !crypto.timingSafeEqual(digest, checksum)) {
@@ -376,28 +449,35 @@ exports.handleBitCartWebhook = async (req, res) => {
         return res.status(401).json({ status: 'fail', message: 'Invalid signature' });
       }
     } else if (secret) {
-        // If secret is configured but signature missing
-        console.warn(`🛑 [Webhook] MISSING SIGNATURE from ${req.ip}. Rejecting for security.`);
-        return res.status(401).json({ status: 'fail', message: 'Missing signature' });
+      // Secret is configured but signature is missing
+      console.warn(`🛑 [Webhook] MISSING SIGNATURE from ${req.ip}. Rejecting for security.`);
+      return res.status(401).json({ status: 'fail', message: 'Missing signature' });
     }
+
+    // Parse the raw body now that HMAC is verified
+    const payload = JSON.parse(rawBody.toString('utf8'));
+    const { id, status } = payload;
 
     const purchase = await Purchase.findOne({ bitcartId: id });
     if (!purchase) {
-      return res.status(404).json({ status: 'fail', message: 'Purchase not found' });
+      // Return 200 so Bitcart doesn't keep retrying for unknown invoices
+      console.warn(`[Webhook] Unknown bitcartId: ${id}`);
+      return res.status(200).json({ status: 'success' });
     }
 
     // Only act on completed / paid invoices
     if (status === 'complete' || status === 'paid') {
       if (purchase.status !== 'confirmed') {
         purchase.status = 'confirmed';
+        purchase.pendingExpiresAt = undefined; // Preserve confirmed purchases from TTL
         await purchase.save();
-        console.log(`📢 [Webhook] Authenticated Payment Confirmed for ${purchase.tokenId}. Release triggered.`);
+        console.log(`📢 [Webhook] Authenticated Payment Confirmed for ${purchase.tokenId}. Payout triggered.`);
         
-        // Trigger payouts in background
+        // Trigger payouts in background (idempotent)
         triggerPurchasePayouts(purchase._id).catch(e => console.error('Payout trigger error:', e));
       } else if (!purchase.payoutsProcessed) {
-         // Retry payouts if they weren't finished correctly last time
-         triggerPurchasePayouts(purchase._id).catch(e => console.error('Payout retry error:', e));
+        // Already confirmed but payouts may have failed — retry
+        triggerPurchasePayouts(purchase._id).catch(e => console.error('Payout retry error:', e));
       }
     }
 
@@ -443,16 +523,15 @@ exports.getCheckoutData = async (req, res) => {
             purchase.status === 'pending'
           ) {
             purchase.status = 'confirmed';
+            purchase.pendingExpiresAt = undefined;
             await purchase.save();
             console.log(`📢 [Sync] Purchase ${purchase.tokenId} auto-marked CONFIRMED via polling.`);
-            
-            // Trigger payouts in background
             triggerPurchasePayouts(purchase._id).catch(e => console.error('Payout sync error:', e));
           } else if (
             (invoiceData.status === 'complete' || invoiceData.status === 'paid') &&
             !purchase.payoutsProcessed
           ) {
-            // If already confirmed but payouts failed previously, retry on poll
+            // Already confirmed but payouts failed — retry on next poll
             triggerPurchasePayouts(purchase._id).catch(e => console.error('Payout retry poll error:', e));
           }
         }
@@ -461,11 +540,22 @@ exports.getCheckoutData = async (req, res) => {
       }
     }
 
-    // Price breakdown for the checkout UI
+    // Price breakdown for the checkout UI — use correct decimal places per currency
+    const currency         = purchase.sale?.currency || 'BTC';
+    const dp               = currency === 'BTC' ? 8 : 2;
     const commissionRate   = parseFloat(settings.commissionRate) || 0.05;
     const sellerAmount     = parseFloat(purchase.sale?.price || 0);
-    const commissionAmount = parseFloat((sellerAmount * commissionRate).toFixed(8));
-    const totalAmount      = parseFloat((sellerAmount + commissionAmount).toFixed(8));
+    const commissionAmount = parseFloat((sellerAmount * commissionRate).toFixed(dp));
+    const totalAmount      = parseFloat((sellerAmount + commissionAmount).toFixed(dp));
+
+    // Admin address for display only
+    const network = purchase.sale?.network || '';
+    let adminAddress = settings.adminBtcAddress;
+    if (currency === 'USDT') {
+      adminAddress = network === 'ERC20'
+        ? (settings.adminUsdtErc20Address || settings.adminUsdtAddress)
+        : (settings.adminUsdtTrc20Address || settings.adminUsdtAddress);
+    }
 
     res.status(200).json({
       status: 'success',
@@ -480,15 +570,13 @@ exports.getCheckoutData = async (req, res) => {
         },
         invoice: invoiceData,
         breakdown: {
-          sellerAmount:     sellerAmount.toFixed(8),
-          commissionAmount: commissionAmount.toFixed(8),
-          totalAmount:      totalAmount.toFixed(8),
+          sellerAmount:     sellerAmount.toFixed(dp),
+          commissionAmount: commissionAmount.toFixed(dp),
+          totalAmount:      totalAmount.toFixed(dp),
           commissionRate:   `${(commissionRate * 100).toFixed(0)}%`,
-          currency:         purchase.sale?.currency || 'BTC',
+          currency,
           sellerAddress:    purchase.sale?.address || '',
-          adminAddress:     purchase.sale?.currency === 'BTC'
-                              ? settings.adminBtcAddress
-                              : settings.adminUsdtAddress
+          adminAddress
         }
       }
     });
@@ -496,6 +584,3 @@ exports.getCheckoutData = async (req, res) => {
     res.status(400).json({ status: 'fail', message: err.message });
   }
 };
-
-
-

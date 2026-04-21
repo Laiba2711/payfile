@@ -89,10 +89,10 @@ const ResetPassword = () => {
             <Button 
                 variant="primary" 
                 className="w-full py-4 font-black shadow-lg shadow-payfile-amber/20 mt-4" 
-                disabled={loading}
+                loading={loading}
                 type="submit"
             >
-              {loading ? 'Updating Password...' : 'Update Password'}
+              Update Password
             </Button>
           </>
         )}

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { Save, Wallet, ShieldCheck, Info, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
+
 
 const AdminSettings = () => {
   const [settings, setSettings] = useState({

@@ -7,7 +7,7 @@ const fetch = require('node-fetch');
 const sendEmail = async (options) => {
   const BREVO_API_KEY = process.env.BREVO_API_KEY;
   const BREVO_SENDER_EMAIL = process.env.BREVO_SENDER_EMAIL;
-  const BREVO_SENDER_NAME = process.env.BREVO_SENDER_NAME || 'PayFile';
+  const BREVO_SENDER_NAME = process.env.BREVO_SENDER_NAME || 'SatoshiBin';
 
   if (!BREVO_API_KEY || !BREVO_SENDER_EMAIL) {
     console.error('Email skipped: BREVO_API_KEY or BREVO_SENDER_EMAIL missing in .env');

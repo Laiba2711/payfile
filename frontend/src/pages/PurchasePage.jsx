@@ -6,6 +6,9 @@ import { Bitcoin, Info, AlertCircle, Clock, ShieldCheck, Coins } from 'lucide-re
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Footer from '../components/layout/Footer';
+import Loader from '../components/ui/Loader';
+
+
 
 // Hooks
 import usePurchase from '../hooks/usePurchase';
@@ -29,11 +32,7 @@ const PurchasePage = () => {
   } = usePurchase(saleId);
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-payfile-white flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-payfile-gold/20 border-t-payfile-gold rounded-full animate-spin"></div>
-      </div>
-    );
+    return <Loader variant="fullscreen" label="Loading Listing..." />;
   }
 
   if (error || !sale) {

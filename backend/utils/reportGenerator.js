@@ -15,7 +15,7 @@ exports.generatePDFReport = (data, res) => {
   doc
     .fillColor('#5D0E12')
     .fontSize(24)
-    .text('PAYFILE', 50, 45, { underline: true })
+    .text('SATOSHIBIN', 50, 45, { underline: true })
     .fillColor('#444444')
     .fontSize(10)
     .text('Admin Commission Report', 200, 50, { align: 'right' })
@@ -99,7 +99,7 @@ exports.generatePDFReport = (data, res) => {
   for (let i = range.start; i < range.start + range.count; i++) {
     doc.switchToPage(i);
     doc.fontSize(8).fillColor('#aaaaaa').text(
-      `Page ${i + 1} of ${range.count} - Confidential PayFile Admin Data`,
+      `Page ${i + 1} of ${range.count} - Confidential SatoshiBin Admin Data`,
       50,
       800,
       { align: 'center' }

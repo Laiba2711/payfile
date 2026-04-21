@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Bitcoin, Coins, ShieldCheck, ArrowLeft, RefreshCw, Zap, XCircle 
 } from 'lucide-react';
+import Loader from '../components/ui/Loader';
 
 // UI
 import Card from '../components/ui/Card';
@@ -37,12 +38,7 @@ const CheckoutPage = () => {
   } = useCheckout(tokenId);
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-payfile-white flex flex-col items-center justify-center gap-6">
-        <div className="w-12 h-12 rounded-full border-4 border-payfile-gold/20 border-t-payfile-gold animate-spin" />
-        <p className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em]">Loading...</p>
-      </div>
-    );
+    return <Loader variant="fullscreen" label="Loading Payment..." />;
   }
 
   if (error && !data) {

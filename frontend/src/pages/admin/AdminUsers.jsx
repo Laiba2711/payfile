@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { Search, Mail, Calendar, User, Shield, Loader2, MoreVertical } from 'lucide-react';
 import Card from '../../components/ui/Card';
+
 
 const AdminUsers = () => {
   const [users, setUsers] = useState([]);

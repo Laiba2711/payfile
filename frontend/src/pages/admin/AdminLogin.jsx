@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, ArrowRight, Loader2 } from 'lucide-react';
+import { ArrowRight, Loader2 } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
+import AuthLayout from '../../components/auth/AuthLayout';
 
 const AdminLogin = ({ onLogin }) => {
   const [email, setEmail] = useState('');
@@ -44,79 +45,60 @@ const AdminLogin = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-payfile-white relative overflow-hidden p-6">
-      {/* Background decoration */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-payfile-gold/5 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-0 right-0 w-96 h-96 bg-payfile-maroon/5 blur-[100px] rounded-full pointer-events-none" />
+    <AuthLayout
+      title="Admin Login"
+      subtitle="Authorized Access Only"
+      image="/auth-login.png"
+      imagePosition="left"
+    >
+      <div className="relative z-10">
+        {error && (
+          <div className="bg-red-50 border border-red-100 text-red-600 px-5 py-4 rounded-2xl mb-8 text-[11px] font-black uppercase tracking-wide flex items-center gap-3 animate-fade-in shadow-sm">
+            <div className="w-1.5 h-1.5 bg-red-600 rounded-full animate-pulse" />
+            {error}
+          </div>
+        )}
 
-      <div className="w-full max-w-md relative z-10">
-        <div className="bg-white border border-payfile-maroon/5 rounded-[40px] p-10 shadow-2xl shadow-payfile-maroon/5 relative overflow-hidden">
-          {/* Internal Glow */}
-          <div className="absolute top-0 right-0 w-32 h-32 bg-payfile-gold/5 blur-3xl rounded-full" />
-          
-          <div className="relative z-10">
-            <div className="flex flex-col items-center mb-10">
-              <div 
-                className="w-16 h-16 bg-gradient-to-br from-payfile-maroon to-payfile-maroon-dark rounded-2xl flex items-center justify-center shadow-xl shadow-payfile-maroon/20 mb-6 group cursor-pointer"
-                onClick={() => navigate('/')}
-              >
-                <Shield className="w-8 h-8 text-payfile-gold group-hover:scale-110 transition-transform" />
-              </div>
-              <h1 className="text-3xl font-black text-payfile-maroon tracking-tight">
-                Admin Login
-              </h1>
-              <p className="text-gray-400 mt-2 text-[10px] uppercase tracking-[0.3em] font-black">Authorized Access Only</p>
-            </div>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <Input
+            label="Email Address"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="admin@payfile.net"
+            required
+          />
 
-            {error && (
-              <div className="bg-red-50 border border-red-100 text-red-600 px-5 py-4 rounded-2xl mb-8 text-[11px] font-black uppercase tracking-wide flex items-center gap-3 animate-fade-in shadow-sm">
-                <div className="w-1.5 h-1.5 bg-red-600 rounded-full animate-pulse" />
-                {error}
+          <Input
+            label="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            required
+          />
+
+          <Button
+            type="submit"
+            disabled={loading}
+            className="w-full py-5 text-xs font-black uppercase tracking-[0.2em] shadow-xl shadow-payfile-amber/20 mt-4"
+          >
+            {loading ? (
+              <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+            ) : (
+              <div className="flex items-center justify-center gap-2">
+                Login to Dashboard
+                <ArrowRight className="w-5 h-5" />
               </div>
             )}
+          </Button>
+        </form>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <Input
-                label="Email Address"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@payfile.net"
-                required
-              />
-
-              <Input
-                label="Password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-              />
-
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full py-5 text-xs font-black uppercase tracking-[0.2em] shadow-xl shadow-payfile-amber/20 mt-4"
-              >
-                {loading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    Login to Dashboard
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                  </>
-                )}
-              </Button>
-            </form>
-
-            <div className="mt-12 text-center">
-                <span className="text-[9px] text-gray-400 font-black uppercase tracking-[0.2em]">Secure Admin Access &bull; SSL Encrypted</span>
-            </div>
-          </div>
+        <div className="mt-12 text-center">
+          <span className="text-[9px] text-gray-400 font-black uppercase tracking-[0.2em]">Secure Admin Access &bull; SSL Encrypted</span>
         </div>
       </div>
-    </div>
+    </AuthLayout>
   );
 };
 

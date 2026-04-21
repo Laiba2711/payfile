@@ -80,11 +80,20 @@ exports.getPublicSale = catchAsync(async (req, res, next) => {
     status: 'success',
     data: {
       sale: {
-        ...sale._doc,
-        sellerPrice: sale.price,
+        _id:          sale._id,
+        file:         sale.file,
+        currency:     sale.currency,
+        network:      sale.network,
+        price:        sale.price,
+        sellerPrice:  sale.price,
         commissionPrice,
         totalPrice,
-        adminAddress
+        adminAddress,
+        status:       sale.status,
+        expiresAt:    sale.expiresAt,
+        createdAt:    sale.createdAt,
+        // NOTE: seller address (payout destination) is intentionally excluded from
+        // the public response to protect seller privacy.
       }
     }
   });

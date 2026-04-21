@@ -35,7 +35,7 @@ const Features = () => {
             Why Choose Us
           </p>
           <h2 className="text-4xl md:text-6xl font-black text-payfile-maroon tracking-tight">
-            Why Choose PayFile?
+            Why Choose SatoshiBin?
           </h2>
         </div>
 
@@ -43,23 +43,30 @@ const Features = () => {
           {features.map((feature, index) => (
             <div
               key={index}
-              className={`relative p-10 rounded-[40px] bg-gradient-to-br ${feature.gradient} border border-payfile-gold/10 group overflow-hidden hover:border-payfile-gold/40 transition-all duration-500`}
+              className={`relative p-10 rounded-[40px] bg-gradient-to-br ${feature.gradient} border border-payfile-gold/10 group overflow-hidden hover:border-payfile-gold/40 transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-payfile-gold/10`}
             >
-              {/* Card glow on hover */}
-              <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-40 transition-opacity duration-500" />
+              {/* Card shine effect on hover */}
+              <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
 
-              {/* Icon ring */}
-              <div className="relative w-20 h-20 rounded-3xl bg-payfile-maroon text-payfile-gold flex items-center justify-center mb-8 shadow-xl shadow-payfile-maroon/20 group-hover:scale-110 transition-transform duration-500">
-                {feature.icon}
-              </div>
+              {/* Content Container to ensure sharpness */}
+              <div className="relative z-10">
+                {/* Icon ring */}
+                <div className="relative w-20 h-20 rounded-3xl bg-payfile-maroon text-payfile-gold flex items-center justify-center mb-8 shadow-xl shadow-payfile-maroon/20 group-hover:scale-110 group-hover:bg-payfile-maroon-dark transition-all duration-500">
+                  {feature.icon}
+                </div>
 
-              <h3 className="text-2xl font-black mb-4 text-payfile-maroon group-hover:text-payfile-amber transition-colors">{feature.title}</h3>
-              <p className="text-gray-500 font-medium leading-relaxed">{feature.desc}</p>
-              
-              <div className="mt-10 flex items-center gap-3">
-                  <div className="w-1.5 h-1.5 rounded-full bg-payfile-gold" />
-                  <div className="w-1.5 h-1.5 rounded-full bg-payfile-gold opacity-50" />
-                  <div className="w-1.5 h-1.5 rounded-full bg-payfile-gold opacity-20" />
+                <h3 className="text-2xl font-black mb-4 text-payfile-maroon group-hover:text-payfile-gold transition-colors duration-300">
+                  {feature.title}
+                </h3>
+                <p className="text-gray-600 font-medium leading-relaxed group-hover:text-gray-900 transition-colors duration-300">
+                  {feature.desc}
+                </p>
+                
+                <div className="mt-10 flex items-center gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-payfile-gold group-hover:scale-125 transition-transform" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-payfile-gold opacity-50 group-hover:opacity-100 transition-opacity delay-75" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-payfile-gold opacity-20 group-hover:opacity-100 transition-opacity delay-150" />
+                </div>
               </div>
             </div>
           ))}

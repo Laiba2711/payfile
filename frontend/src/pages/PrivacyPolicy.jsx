@@ -14,7 +14,7 @@ const PrivacyPolicy = () => {
             Privacy Policy
           </h1>
           <p className="text-gray-500 font-medium max-w-xl mx-auto italic">
-            Last updated: April 14, 2026. Your data security on the PayFile Network is our highest priority.
+            Last updated: April 14, 2026. Your data security on the SatoshiBin Network is our highest priority.
           </p>
         </div>
 
@@ -28,7 +28,7 @@ const PrivacyPolicy = () => {
               <h2 className="text-2xl font-black text-payfile-maroon uppercase tracking-tight">1. Information We Collect</h2>
             </div>
             <div className="prose prose-payfile max-w-none text-gray-600 leading-relaxed font-medium">
-              <p className="mb-4">To provide a secure and efficient marketplace on the PayFile Distributed Network, we collect the following types of information:</p>
+              <p className="mb-4">To provide a secure and efficient marketplace on the SatoshiBin Distributed Network, we collect the following types of information:</p>
               <ul className="grid grid-cols-1 md:grid-cols-2 gap-4 list-none p-0">
                 <li className="p-6 rounded-3xl bg-payfile-cream/50 border border-payfile-maroon/5 flex gap-4 items-start">
                   <div className="w-2 h-2 rounded-full bg-payfile-gold mt-1.5 shrink-0" />
@@ -73,10 +73,10 @@ const PrivacyPolicy = () => {
             <div className="prose prose-payfile max-w-none text-gray-600 leading-relaxed font-medium p-8 rounded-[40px] bg-payfile-maroon text-payfile-white shadow-2xl overflow-hidden relative">
               <div className="absolute top-0 right-0 w-64 h-64 bg-payfile-gold/10 blur-3xl rounded-full" />
               <p className="mb-4 relative z-10">
-                PayFile operates on the Bitcoin protocol. By using our service, you acknowledge that all Bitcoin transactions are inherently public and recorded on a distributed ledger.
+                SatoshiBin operates on the Bitcoin protocol. By using our service, you acknowledge that all Bitcoin transactions are inherently public and recorded on a distributed ledger.
               </p>
               <p className="relative z-10 text-payfile-gold/80 font-bold italic">
-                While your PayFile account is private, your Bitcoin transaction history is permanent and visible on the network.
+                While your SatoshiBin account is private, your Bitcoin transaction history is permanent and visible on the network.
               </p>
             </div>
           </section>
@@ -138,7 +138,7 @@ const PrivacyPolicy = () => {
           <section className="animate-fade-up-delay-1">
             <div className="p-10 rounded-[40px] bg-payfile-cream border border-payfile-gold/20 text-center">
               <h3 className="text-xl font-black text-payfile-maroon uppercase tracking-tight mb-4">Questions regarding policy?</h3>
-              <p className="text-gray-500 mb-8 max-w-lg mx-auto">Our security team is ready to assist with any inquiries regarding the PayFile Network's data infrastructure.</p>
+              <p className="text-gray-500 mb-8 max-w-lg mx-auto">Our security team is ready to assist with any inquiries regarding the SatoshiBin Network's data infrastructure.</p>
               <a href="mailto:support@payfile.network" className="inline-block px-10 py-4 bg-payfile-maroon text-payfile-gold rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-payfile-maroon-dark transition-all shadow-xl shadow-payfile-maroon/20">Contact Node Admin</a>
             </div>
           </section>

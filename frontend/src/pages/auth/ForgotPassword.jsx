@@ -57,9 +57,9 @@ const ForgotPassword = () => {
           variant="primary" 
           className="w-full py-4 font-black shadow-lg shadow-payfile-amber/20"
           type="submit"
-          disabled={loading}
+          loading={loading}
         >
-          {loading ? 'Sending...' : 'Send Reset Link'}
+          Send Reset Link
         </Button>
 
         <p className="text-center pt-4">

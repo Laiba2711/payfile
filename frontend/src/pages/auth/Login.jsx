@@ -30,6 +30,8 @@ const Login = ({ onLogin }) => {
     <AuthLayout 
       title="Login" 
       subtitle="Sign in to your account to continue"
+      image="/auth-login.png"
+      imagePosition="left"
     >
       <form className="space-y-6" onSubmit={handleSubmit}>
         {error && (
@@ -64,8 +66,8 @@ const Login = ({ onLogin }) => {
           </div>
         </div>
 
-        <Button variant="primary" className="w-full py-4 mt-2 font-black shadow-lg shadow-payfile-amber/20" disabled={loading}>
-          {loading ? 'Logging in...' : 'Login'}
+        <Button variant="primary" className="w-full py-4 mt-2 font-black shadow-lg shadow-payfile-amber/20" loading={loading}>
+          Login
         </Button>
 
         <p className="text-center text-gray-400 text-[10px] font-bold uppercase tracking-widest py-4">

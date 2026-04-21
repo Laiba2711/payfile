@@ -1,25 +1,14 @@
-# Stage 1: Build stage
 FROM node:20-alpine AS build
-
 WORKDIR /app
-
-# Copy package files and install dependencies
 COPY package*.json ./
-RUN npm install
-
-# Copy source and build
+RUN npm ci
 COPY . .
 RUN npm run build
 
-# Stage 2: Production stage (Serve with Nginx)
-FROM nginx:alpine
-
-# Copy built files from build stage
+# Final: production nginx serving static files
+FROM nginx:stable-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
-
-# Copy custom nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-
 EXPOSE 80
-
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD wget -qO- http://localhost/health || exit 1
 CMD ["nginx", "-g", "daemon off;"]

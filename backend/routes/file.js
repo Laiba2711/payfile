@@ -3,26 +3,11 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const fileController = require('../controllers/fileController');
-const jwt = require('jsonwebtoken');
+const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
 
-// Auth Middleware (Refactoring to a separate middleare soon if needed)
-const protect = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ message: 'Unauthorized: No token provided' });
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret-key');
-    req.user = decoded;
-    next();
-  } catch (err) {
-    console.error('JWT Verification Error:', err.message);
-    res.status(401).json({ message: 'Unauthorized: Invalid or expired token. Please log in again.' });
-  }
-};
-
-// Multer Storage Configuration
+// ── Multer Storage Configuration ──────────────────────────────────────────────
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadPath = path.join(__dirname, '../uploads');
@@ -37,16 +22,41 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage: storage });
+// Block obviously dangerous file types (executables, scripts)
+const BLOCKED_MIME_TYPES = new Set([
+  'application/x-msdownload',
+  'application/x-executable',
+  'application/x-sh',
+  'application/x-bat',
+  'text/x-sh',
+  'application/x-dosexec',
+  'application/vnd.microsoft.portable-executable',
+  'application/x-msdos-program',
+]);
 
+const fileFilter = (req, file, cb) => {
+  if (BLOCKED_MIME_TYPES.has(file.mimetype)) {
+    return cb(new Error(`File type not allowed: ${file.mimetype}`), false);
+  }
+  cb(null, true);
+};
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 100 * 1024 * 1024, // 100 MB max per file
+  }
+});
+
+// ── Public routes (no auth required) ─────────────────────────────────────────
 router.get('/public/download/:id', fileController.publicDownloadFile);
-
-// New public endpoints for shared files
 router.get('/shared/info/:id', fileController.getSharedFileInfo);
 router.post('/shared/download/:id', fileController.sharedDownloadFile);
 router.get('/public/preview/:id', fileController.getPreviewFile);
 
-router.use(protect); // Apply protection to all other file routes
+// ── Protected routes ──────────────────────────────────────────────────────────
+router.use(authMiddleware.protect);
 
 router.post('/upload', upload.single('file'), fileController.uploadFile);
 router.get('/', fileController.getFiles);
