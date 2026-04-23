@@ -5,8 +5,8 @@ const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 
 
-// Helper: decimal precision by currency
-const decimals = (currency) => currency === 'BTC' ? 8 : 2;
+// Helper: decimal precision by currency (USDT uses 6 for TRC20 micro-payments)
+const decimals = (currency) => currency === 'BTC' ? 8 : 6;
 
 exports.createSale = catchAsync(async (req, res, next) => {
   const { fileId, price, currency, network, address, expiry } = req.body;

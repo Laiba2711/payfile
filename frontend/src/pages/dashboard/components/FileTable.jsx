@@ -1,8 +1,14 @@
-import React from 'react';
-import { FileText, Download, Share2, Bitcoin, Trash2 } from 'lucide-react';
+import { FileText, Download, Share2, Bitcoin, Trash2, Video, Image as ImageIcon } from 'lucide-react';
 import Card from '../../../components/ui/Card';
 
 const FileTable = ({ files, handleDownload, handleShareClick, handleSaleClick, handleDelete }) => {
+  const getFileIcon = (mimeType) => {
+    if (!mimeType) return <FileText className="w-4 h-4" />;
+    if (mimeType.startsWith('video/')) return <Video className="w-4 h-4 text-payfile-amber" />;
+    if (mimeType.startsWith('image/')) return <ImageIcon className="w-4 h-4 text-payfile-gold" />;
+    return <FileText className="w-4 h-4 text-gray-400" />;
+  };
+
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -43,8 +49,11 @@ const FileTable = ({ files, handleDownload, handleShareClick, handleSaleClick, h
                         files.map((file) => (
                             <tr key={file._id} className="group hover:bg-payfile-cream/30 transition-colors">
                                 <td className="py-5">
-                                    <div className="flex flex-col">
-                                        <span className="text-sm font-bold text-payfile-maroon group-hover:text-payfile-gold transition-colors">{file.name}</span>
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-lg bg-white border border-payfile-maroon/5 flex items-center justify-center shrink-0">
+                                            {getFileIcon(file.mimeType)}
+                                        </div>
+                                        <span className="text-sm font-bold text-payfile-maroon group-hover:text-payfile-gold transition-colors truncate max-w-[200px]">{file.name}</span>
                                     </div>
                                 </td>
                                 <td className="py-5 text-xs text-gray-500 font-medium">

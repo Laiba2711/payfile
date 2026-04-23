@@ -22,7 +22,7 @@ const saleSchema = new mongoose.Schema({
   },
   network: {
     type: String,
-    enum: ['', 'TRC20', 'ERC20'],
+    enum: ['', 'TRC20'],
     default: ''
   },
   address: {

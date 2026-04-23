@@ -15,7 +15,7 @@ const VerifyPurchaseSection = ({
   retryingPayout
 }) => {
   return (
-    <Card className="p-10 border-payfile-maroon/5 shadow-2xl">
+    <Card className="p-6 md:p-10 border-payfile-maroon/5 shadow-2xl">
         <div className="mb-10 flex items-center justify-between">
             <div>
                 <h2 className="text-2xl font-black text-payfile-maroon tracking-tight flex items-center gap-3">
@@ -79,7 +79,7 @@ const VerifyPurchaseSection = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 p-8 bg-white rounded-3xl border border-payfile-maroon/5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 p-6 md:p-8 bg-white rounded-3xl border border-payfile-maroon/5">
                 <div>
                   <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-2">Price</p>
                   <p className="text-3xl font-black text-payfile-maroon">{purchaseDetails.sale?.price} <span className="text-payfile-gold text-sm tracking-tighter">{purchaseDetails.sale?.currency}</span></p>

@@ -40,13 +40,15 @@ const AppContent = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const handleLogin = (userData, token) => {
+  const handleLogin = (userData, token, redirectTo = null) => {
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
     
-    // Redirect based on role
-    if (userData.role === 'admin') {
+    // If there's a redirect target (e.g. from a purchase listing), go there first
+    if (redirectTo) {
+      navigate(redirectTo);
+    } else if (userData.role === 'admin') {
       navigate('/admin/dashboard');
     } else {
       navigate('/dashboard');

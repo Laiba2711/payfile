@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import AuthLayout from '../../components/auth/AuthLayout';
 import Input from '../../components/ui/Input';
@@ -7,6 +7,7 @@ import Button from '../../components/ui/Button';
 
 const Register = ({ onRegister }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -16,6 +17,9 @@ const Register = ({ onRegister }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Carry redirect param so a buyer registering mid-purchase bounces back to the listing
+  const redirectTo = new URLSearchParams(location.search).get('redirect') || null;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -24,7 +28,7 @@ const Register = ({ onRegister }) => {
     try {
       const response = await axios.post('/api/auth/register', formData);
       if (onRegister) {
-        onRegister(response.data.data.user, response.data.token);
+        onRegister(response.data.data.user, response.data.token, redirectTo);
       } else {
         navigate('/login');
       }
@@ -39,8 +43,6 @@ const Register = ({ onRegister }) => {
     <AuthLayout 
       title="Create Account" 
       subtitle="Join SatoshiBin today to start selling files"
-      image="/auth-register.png"
-      imagePosition="right"
     >
       <form className="space-y-5" onSubmit={handleSubmit}>
         {error && (
@@ -99,7 +101,10 @@ const Register = ({ onRegister }) => {
 
         <p className="text-center text-gray-400 text-[10px] font-bold uppercase tracking-widest pt-4">
           Already have an account?{' '}
-          <Link to="/login" className="text-payfile-maroon hover:text-payfile-gold transition-colors ml-1 underline decoration-payfile-gold/30 underline-offset-4">
+          <Link
+            to={redirectTo ? `/login?redirect=${encodeURIComponent(redirectTo)}` : '/login'}
+            className="text-payfile-maroon hover:text-payfile-gold transition-colors ml-1 underline decoration-payfile-gold/30 underline-offset-4"
+          >
             Login
           </Link>
         </p>

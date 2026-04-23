@@ -14,7 +14,6 @@ const AdminSettings = () => {
     commissionRate: 0.05,
     btcWalletId: '',
     usdtTrc20WalletId: '',
-    usdtErc20WalletId: ''
   });
   const [syncStatus, setSyncStatus] = useState([]);
 
@@ -132,20 +131,7 @@ const AdminSettings = () => {
               />
             </div>
 
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 ml-1">
-                <Wallet className="w-4 h-4 text-payfile-gold/80" />
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Admin USDT ERC20 Address</label>
-              </div>
-              <input
-                type="text"
-                value={settings.adminUsdtErc20Address}
-                onChange={(e) => setSettings({ ...settings, adminUsdtErc20Address: e.target.value })}
-                className="w-full bg-payfile-cream/30 border border-payfile-maroon/10 rounded-2xl py-4 px-6 text-payfile-maroon font-black font-mono text-sm focus:outline-none focus:border-payfile-gold/50 transition-all shadow-inner"
-                placeholder="Enter ERC20 address (0x...)"
-                required
-              />
-            </div>
+
           </div>
 
           <div className="pt-10 border-t border-payfile-maroon/5 space-y-10">
@@ -172,16 +158,7 @@ const AdminSettings = () => {
                     placeholder="Bitcart TRC20 Wallet ID"
                   />
                 </div>
-                <div className="space-y-4">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">USDT ERC20 Wallet ID</label>
-                  <input
-                    type="text"
-                    value={settings.usdtErc20WalletId}
-                    onChange={(e) => setSettings({ ...settings, usdtErc20WalletId: e.target.value })}
-                    className="w-full bg-payfile-cream/10 border border-payfile-maroon/5 rounded-2xl py-4 px-6 text-payfile-maroon font-black font-mono text-xs focus:outline-none focus:border-payfile-gold/30 transition-all"
-                    placeholder="Bitcart ERC20 Wallet ID"
-                  />
-                </div>
+
               </div>
             </div>
           </div>

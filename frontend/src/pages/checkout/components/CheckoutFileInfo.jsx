@@ -1,5 +1,4 @@
-import React from 'react';
-import { FileText } from 'lucide-react';
+import { FileText, Video, Image as ImageIcon } from 'lucide-react';
 
 const formatSize = (bytes) => {
   if (!bytes) return '';
@@ -9,11 +8,18 @@ const formatSize = (bytes) => {
   return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
 };
 
-const CheckoutFileInfo = ({ fileName, fileSize }) => {
+const CheckoutFileInfo = ({ fileName, fileSize, mimeType }) => {
+  const getFileIcon = () => {
+    if (!mimeType) return <FileText className="w-6 h-6 text-payfile-gold" />;
+    if (mimeType.startsWith('video/')) return <Video className="w-6 h-6 text-payfile-amber" />;
+    if (mimeType.startsWith('image/')) return <ImageIcon className="w-6 h-6 text-payfile-gold" />;
+    return <FileText className="w-6 h-6 text-gray-400" />;
+  };
+
   return (
     <div className="flex items-start gap-4 p-5 rounded-3xl bg-payfile-cream/30 border border-payfile-maroon/5">
       <div className="w-12 h-12 rounded-2xl bg-white border border-payfile-gold/20 flex items-center justify-center shrink-0 shadow-sm">
-        <FileText className="w-6 h-6 text-payfile-gold" />
+        {getFileIcon()}
       </div>
       <div className="min-w-0">
         <p className="text-sm font-black text-payfile-maroon truncate block">{fileName}</p>

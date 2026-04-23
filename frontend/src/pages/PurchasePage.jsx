@@ -8,27 +8,22 @@ import Button from '../components/ui/Button';
 import Footer from '../components/layout/Footer';
 import Loader from '../components/ui/Loader';
 
-
-
 // Hooks
 import usePurchase from '../hooks/usePurchase';
 
 // Components
 import SaleSummary from './purchase/components/SaleSummary';
-import ActionSection from './purchase/components/ActionSection';
 
 const PurchasePage = () => {
   const { saleId } = useParams();
   const navigate = useNavigate();
-  
+
   const {
     sale,
     loading,
     error,
-    tokenGenerated,
-    purchase,
-    handleGenerateToken,
-    handleDownload
+    buyLoading,
+    handleBuyNow,
   } = usePurchase(saleId);
 
   if (loading) {
@@ -122,13 +117,24 @@ const PurchasePage = () => {
               </ul>
             </div>
 
-            <ActionSection 
-                tokenGenerated={tokenGenerated}
-                purchase={purchase}
-                isExpired={isExpired}
-                handleGenerateToken={handleGenerateToken}
-                handleDownload={handleDownload}
-            />
+            {/* Error message */}
+            {error && (
+              <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-xs font-bold uppercase tracking-wide animate-fade-in">
+                {error}
+              </div>
+            )}
+
+            {/* Buy Now Button */}
+            <Button
+              id="buy-now-btn"
+              variant="primary"
+              className="w-full py-5 text-sm font-black uppercase tracking-[0.2em] shadow-xl shadow-payfile-amber/20"
+              onClick={handleBuyNow}
+              disabled={isExpired || buyLoading}
+              loading={buyLoading}
+            >
+              {isExpired ? 'Listing Expired' : buyLoading ? 'Preparing Payment...' : 'Buy Now'}
+            </Button>
           </div>
 
           {/* Trust Footer */}
