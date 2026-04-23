@@ -16,26 +16,21 @@ const AppError = require('../utils/AppError');
 const getBitcartCurrencyCode = (currency, network) => {
   if (currency === 'BTC') return 'BTC';
   if (currency === 'USDT') {
-    if (network === 'ERC20') return 'USDTETH';
-    return 'USDTTRX'; // Default USDT to TRC20
+    return 'USDTTRX'; // Always USDT to TRC20
   }
-  return currency; // Passthrough for any future currencies
+  return currency;
 };
 
 // ── Helper: load settings with fallback, env always overrides for addresses ──
 const loadSettings = async () => {
   const db = await Settings.findOne();
   return {
-    // Env vars take priority for addresses so .env is the source of truth
     adminBtcAddress:       process.env.ADMIN_BTC_ADDRESS        || (db && db.adminBtcAddress)        || '',
     adminUsdtAddress:      process.env.ADMIN_USDT_ADDRESS       || (db && db.adminUsdtAddress)       || '',
     adminUsdtTrc20Address: process.env.ADMIN_USDT_TRC20_ADDRESS || (db && db.adminUsdtTrc20Address)  || '',
-    adminUsdtErc20Address: process.env.ADMIN_USDT_ERC20_ADDRESS || (db && db.adminUsdtErc20Address)  || '',
     commissionRate:        (db && db.commissionRate) || 0.05,
-    // Bitcart wallet IDs per currency
     btcWalletId:           process.env.BITCART_WALLET_ID             || (db && db.btcWalletId)           || '',
     usdtTrc20WalletId:     process.env.BITCART_USDT_TRC20_WALLET_ID  || (db && db.usdtTrc20WalletId)     || '',
-    usdtErc20WalletId:     process.env.BITCART_USDT_ERC20_WALLET_ID  || (db && db.usdtErc20WalletId)     || '',
   };
 };
 
@@ -61,18 +56,16 @@ exports.createPurchase = catchAsync(async (req, res, next) => {
   const settings       = await loadSettings();
   const commissionRate = parseFloat(settings.commissionRate) || 0.05;
 
-  // Price breakdown — USDT uses 2 decimal places, BTC uses 8
-  const dp               = sale.currency === 'BTC' ? 8 : 2;
+  // Price breakdown — USDT uses 6 decimal places (TRC20 standard), BTC uses 8
+  const dp               = sale.currency === 'BTC' ? 8 : 6;
   const sellerAmount     = parseFloat(sale.price);
   const commissionAmount = parseFloat((sellerAmount * commissionRate).toFixed(dp));
   const totalAmount      = parseFloat((sellerAmount + commissionAmount).toFixed(dp));
 
   // Determine which Bitcart wallet to use
-  let walletId = settings.btcWalletId; // BTC default
+  let walletId = settings.btcWalletId; 
   if (sale.currency === 'USDT') {
-    walletId = sale.network === 'ERC20'
-      ? settings.usdtErc20WalletId
-      : settings.usdtTrc20WalletId;
+    walletId = settings.usdtTrc20WalletId;
   }
 
   // Map currency+network to Bitcart-specific currency code
@@ -251,7 +244,7 @@ const triggerPurchasePayouts = async (purchaseId) => {
     // Determine correct wallet ID for this currency+network
     let walletId = settings.btcWalletId;
     if (currency === 'USDT') {
-      walletId = network === 'ERC20' ? settings.usdtErc20WalletId : settings.usdtTrc20WalletId;
+      walletId = settings.usdtTrc20WalletId;
     }
 
     if (!walletId) {
@@ -300,8 +293,6 @@ const triggerPurchasePayouts = async (purchaseId) => {
       let adminAddress;
       if (currency === 'BTC') {
         adminAddress = settings.adminBtcAddress;
-      } else if (network === 'ERC20') {
-        adminAddress = settings.adminUsdtErc20Address || settings.adminUsdtAddress;
       } else {
         adminAddress = settings.adminUsdtTrc20Address || settings.adminUsdtAddress;
       }
@@ -542,7 +533,7 @@ exports.getCheckoutData = async (req, res) => {
 
     // Price breakdown for the checkout UI — use correct decimal places per currency
     const currency         = purchase.sale?.currency || 'BTC';
-    const dp               = currency === 'BTC' ? 8 : 2;
+    const dp               = currency === 'BTC' ? 8 : 6;
     const commissionRate   = parseFloat(settings.commissionRate) || 0.05;
     const sellerAmount     = parseFloat(purchase.sale?.price || 0);
     const commissionAmount = parseFloat((sellerAmount * commissionRate).toFixed(dp));
@@ -552,9 +543,7 @@ exports.getCheckoutData = async (req, res) => {
     const network = purchase.sale?.network || '';
     let adminAddress = settings.adminBtcAddress;
     if (currency === 'USDT') {
-      adminAddress = network === 'ERC20'
-        ? (settings.adminUsdtErc20Address || settings.adminUsdtAddress)
-        : (settings.adminUsdtTrc20Address || settings.adminUsdtAddress);
+      adminAddress = settings.adminUsdtTrc20Address || settings.adminUsdtAddress;
     }
 
     res.status(200).json({

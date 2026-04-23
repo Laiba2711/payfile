@@ -50,9 +50,9 @@ exports.getStats = catchAsync(async (req, res, next) => {
       totalUsers,
       totalSales: confirmedPurchases.length,
       totalBtcRevenue: totalBtcRevenue.toFixed(8),
-      totalUsdtRevenue: totalUsdtRevenue.toFixed(2),
+      totalUsdtRevenue: totalUsdtRevenue.toFixed(6),
       totalBtcCommission: totalBtcCommission.toFixed(8),
-      totalUsdtCommission: totalUsdtCommission.toFixed(2),
+      totalUsdtCommission: totalUsdtCommission.toFixed(6),
       commissionRate
     }
   });
@@ -93,7 +93,7 @@ exports.getHistory = catchAsync(async (req, res, next) => {
 
   const formattedHistory = history.map(item => {
     const currency = item.sale ? item.sale.currency : 'BTC';
-    const dp = currency === 'BTC' ? 8 : 2;
+    const dp = currency === 'BTC' ? 8 : 6;
     const price = item.sale ? parseFloat(item.sale.price) : 0;
     return {
       id: item._id,
@@ -131,11 +131,9 @@ exports.updateSettings = catchAsync(async (req, res, next) => {
     adminBtcAddress, 
     adminUsdtAddress, 
     adminUsdtTrc20Address, 
-    adminUsdtErc20Address, 
     commissionRate,
     btcWalletId,
     usdtTrc20WalletId,
-    usdtErc20WalletId
   } = req.body;
   
   let settings = await Settings.findOne();
@@ -181,10 +179,7 @@ exports.updateSettings = catchAsync(async (req, res, next) => {
     await syncWallet(usdtTrc20WalletId || settings.usdtTrc20WalletId || process.env.BITCART_USDT_TRC20_WALLET_ID, adminUsdtTrc20Address, 'USDT TRC20');
   }
 
-  if (adminUsdtErc20Address && adminUsdtErc20Address !== settings.adminUsdtErc20Address) {
-    settings.adminUsdtErc20Address = adminUsdtErc20Address;
-    await syncWallet(usdtErc20WalletId || settings.usdtErc20WalletId || process.env.BITCART_USDT_ERC20_WALLET_ID, adminUsdtErc20Address, 'USDT ERC20');
-  }
+
 
   // Update other fields
   if (adminUsdtAddress)    settings.adminUsdtAddress   = adminUsdtAddress;
@@ -197,7 +192,6 @@ exports.updateSettings = catchAsync(async (req, res, next) => {
   }
   if (btcWalletId)         settings.btcWalletId        = btcWalletId;
   if (usdtTrc20WalletId)   settings.usdtTrc20WalletId  = usdtTrc20WalletId;
-  if (usdtErc20WalletId)   settings.usdtErc20WalletId  = usdtErc20WalletId;
   
   await settings.save();
 
@@ -237,7 +231,7 @@ exports.getIncomeStats = catchAsync(async (req, res, next) => {
       formattedStats[date] = { date, btc: 0, usdt: 0 };
     }
     if (item._id.currency === 'USDT') {
-      formattedStats[date].usdt = parseFloat(item.amount.toFixed(2));
+      formattedStats[date].usdt = parseFloat(item.amount.toFixed(6));
     } else {
       formattedStats[date].btc = parseFloat(item.amount.toFixed(8));
     }
@@ -280,9 +274,9 @@ exports.downloadReport = catchAsync(async (req, res, next) => {
     totalUsers,
     totalSales: confirmedPurchases.length,
     totalBtcRevenue: totalBtcRevenue.toFixed(8),
-    totalUsdtRevenue: totalUsdtRevenue.toFixed(2),
+    totalUsdtRevenue: totalUsdtRevenue.toFixed(6),
     totalBtcCommission: totalBtcCommission.toFixed(8),
-    totalUsdtCommission: totalUsdtCommission.toFixed(2),
+    totalUsdtCommission: totalUsdtCommission.toFixed(6),
     commissionRate: `${(commissionRate * 100).toFixed(1)}%`
   };
 
@@ -293,7 +287,7 @@ exports.downloadReport = catchAsync(async (req, res, next) => {
 
   const history = historyData.map(item => {
     const currency = item.sale ? item.sale.currency : 'BTC';
-    const dp = currency === 'BTC' ? 8 : 2;
+    const dp = currency === 'BTC' ? 8 : 6;
     const price = item.sale ? parseFloat(item.sale.price) : 0;
     return {
       date: item.updatedAt,

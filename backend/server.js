@@ -60,7 +60,7 @@ app.use('/api/purchases/bitcart-webhook', express.raw({ type: 'application/json'
 app.use(express.json({ limit: '10kb' }));
 
 // ── 6) Data sanitization against NoSQL query injection ────────────────────────
-app.use(mongoSanitize());
+// app.use(mongoSanitize());
 
 // ── 7) Prevent parameter pollution ────────────────────────────────────────────
 app.use(hpp());
@@ -78,7 +78,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // ── Catch undefined routes ────────────────────────────────────────────────────
-app.all('*', (req, res, next) => {
+app.use((req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
 });
 

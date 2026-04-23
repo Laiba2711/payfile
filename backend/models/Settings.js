@@ -14,10 +14,7 @@ const settingsSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
-  adminUsdtErc20Address: {
-    type: String,
-    default: ''
-  },
+
   commissionRate: {
     type: Number,
     default: 0.05
@@ -30,10 +27,7 @@ const settingsSchema = new mongoose.Schema({
     type: String,
     default: ""
   },
-  usdtErc20WalletId: {
-    type: String,
-    default: ""
-  },
+
 
   updatedAt: {
     type: Date,

@@ -34,6 +34,7 @@ const CheckoutPage = () => {
     displayStatus,
     fileName,
     fileSize,
+    mimeType,
     data
   } = useCheckout(tokenId);
 
@@ -95,7 +96,7 @@ const CheckoutPage = () => {
           </div>
 
           <div className="p-8 space-y-8">
-            <CheckoutFileInfo fileName={fileName} fileSize={fileSize} />
+            <CheckoutFileInfo fileName={fileName} fileSize={fileSize} mimeType={mimeType} />
 
             {isConfirmed ? (
               <ConfirmationState handleDownload={handleDownload} />

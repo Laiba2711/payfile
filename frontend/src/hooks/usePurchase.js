@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 const usePurchase = (saleId) => {
+    const navigate = useNavigate();
     const [sale, setSale] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [tokenGenerated, setTokenGenerated] = useState(false);
-    const [purchase, setPurchase] = useState(null);
+    const [buyLoading, setBuyLoading] = useState(false);
 
     useEffect(() => {
         fetchSaleDetails();
@@ -25,50 +26,52 @@ const usePurchase = (saleId) => {
         }
     };
 
-    useEffect(() => {
-        let interval;
-        if (tokenGenerated && purchase && purchase.status === 'pending') {
-            interval = setInterval(async () => {
-                try {
-                    const response = await axios.get(`/api/purchases/status/${purchase.tokenId}`);
-                    if (response.data.data.status === 'confirmed') {
-                        setPurchase(prev => ({ ...prev, status: 'confirmed' }));
-                        clearInterval(interval);
-                    }
-                } catch (err) {
-                    console.error('Error polling status:', err);
-                }
-            }, 10000);
+    const handleBuyNow = async () => {
+        // ── Guard: user must be logged in ──────────────────────────────────────
+        const token = localStorage.getItem('token');
+        if (!token) {
+            // Redirect to login, carrying the current listing URL so we bounce
+            // the buyer straight back here after they authenticate.
+            navigate(`/login?redirect=/listing/${saleId}`);
+            return;
         }
-        return () => clearInterval(interval);
-    }, [tokenGenerated, purchase]);
 
-    const handleGenerateToken = async () => {
+        setBuyLoading(true);
+        setError('');
+
         try {
+            // Authorization header is automatically added by the global
+            // axios interceptor in main.jsx — no need to set it manually here.
             const response = await axios.post('/api/purchases', { saleId });
+
             if (response.data.status === 'success') {
-                setPurchase(response.data.data.purchase);
-                setTokenGenerated(true);
+                const { tokenId } = response.data.data.purchase;
+                // Go directly to the checkout page — no intermediate "Launch Checkout" button
+                navigate(`/checkout/${tokenId}`);
             }
         } catch (err) {
-            setError('Failed to generate purchase token. Please try again.');
+            if (err.response?.status === 401) {
+                // Token expired or invalid — clear stale auth and redirect to login
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                navigate(`/login?redirect=/listing/${saleId}`);
+            } else {
+                setError(
+                    err.response?.data?.message ||
+                    'Failed to initiate purchase. Please try again.'
+                );
+            }
+        } finally {
+            setBuyLoading(false);
         }
-    };
-
-    const handleDownload = async () => {
-        if (!purchase || purchase.status !== 'confirmed') return;
-        const downloadUrl = `/api/files/public/download/${sale.file._id}?token=${purchase.tokenId}`;
-        window.open(downloadUrl, '_blank');
     };
 
     return {
         sale,
         loading,
         error,
-        tokenGenerated,
-        purchase,
-        handleGenerateToken,
-        handleDownload
+        buyLoading,
+        handleBuyNow,
     };
 };
 

@@ -1,52 +1,26 @@
 services:
 
-  # ─── Public-facing Nginx Reverse Proxy ─────────────────────────────────────
-  nginx:
-    build:
-      context: ./nginx
-    container_name: payfile_nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      - DOMAIN=${DOMAIN:-localhost}
-    volumes:
-      - ./nginx/certbot/conf:/etc/letsencrypt:ro
-      - ./nginx/certbot/www:/var/www/certbot:ro
-    depends_on:
-      backend:
-        condition: service_healthy
-      frontend:
-        condition: service_healthy
-    networks:
-      - payfile_net
-
-  # ─── Let's Encrypt Certificate Auto-renewal ────────────────────────────────
-  certbot:
-    image: certbot/certbot:latest
-    container_name: payfile_certbot
-    restart: unless-stopped
-    volumes:
-      - ./nginx/certbot/conf:/etc/letsencrypt
-      - ./nginx/certbot/www:/var/www/certbot
-    # Renew twice daily (Let's Encrypt certs expire every 90 days)
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done;'"
-    networks:
-      - payfile_net
-
-  # ─── React Frontend (Nginx serving built static files) ────────────────────
+  # ─── React Frontend (Vite Dev Server — NO NGINX) ──────────────────────────
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: payfile_frontend
     restart: unless-stopped
-    # No external ports — only nginx can reach this
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
     networks:
       - payfile_net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5173/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # ─── Node.js                              Backend API ───────────────────────────────────────────────────
+  # ─── Node.js Backend API ───────────────────────────────────────────────────
   backend:
     build:
       context: ./backend
@@ -55,14 +29,23 @@ services:
     command: node server.js
     restart: unless-stopped
     env_file: .env
+    ports:
+      - "5000:5000"
     volumes:
+      - ./backend:/app
+      - /app/node_modules
       - uploads_data:/app/uploads
     depends_on:
       mongodb:
         condition: service_healthy
     networks:
       - payfile_net
-    # No external ports — only accessible via nginx proxy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
 
   # ─── MongoDB Database ───────────────────────────────────────────────────────
   mongodb:
@@ -120,8 +103,8 @@ services:
     container_name: bitcart_btc
     restart: unless-stopped
     environment:
-      BTC_NETWORK:    mainnet
-      BTC_LIGHTNING:  "false"
+      BTC_NETWORK: ${BTC_NETWORK:-mainnet}
+      BTC_SERVER:  ${BTC_ELECTRUM_SERVER}
     volumes:
       - bitcart_btc_data:/data
     networks:
@@ -129,27 +112,20 @@ services:
         aliases:
           - btc
 
-  # ─── Bitcart ETH Daemon ─────────────────────────────────────────────────────
-  bitcart_eth:
-    image: bitcart/bitcart-eth:stable
-    container_name: bitcart_eth
-    restart: unless-stopped
-    environment:
-      ETH_NETWORK: mainnet
-    volumes:
-      - bitcart_eth_data:/data
-    networks:
-      payfile_net:
-        aliases:
-          - eth
 
   # ─── Bitcart TRX Daemon ─────────────────────────────────────────────────────
   bitcart_trx:
     image: bitcart/bitcart-trx:stable
     container_name: bitcart_trx
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    env_file: .env
     environment:
       TRX_NETWORK: mainnet
+      TRX_SERVER:  https://api.trongrid.io
+      TRX_API_KEY: b1989b66-9744-4be5-97e3-f03cdd27dc75
     volumes:
       - bitcart_trx_data:/data
     networks:
@@ -180,8 +156,6 @@ services:
         condition: service_started
       bitcart_btc:
         condition: service_started
-      bitcart_eth:
-        condition: service_started
       bitcart_trx:
         condition: service_started
       bitcart_api_init:
@@ -196,11 +170,18 @@ services:
       DB_USER:         bitcart
       DB_PASSWORD:     ${BITCART_DB_PASSWORD:-bitcart_secure_pass}
       REDIS_HOST:      redis://redis
-      BITCART_CRYPTOS: btc,eth,trx
+      BITCART_CRYPTOS: btc,trx
       BTC_HOST:        btc
       BTC_PORT:        "5000"
       BTC_NETWORK:     mainnet
-    # Port 8000 internal only — backend connects via Docker network
+      ETH_HOST:        eth
+      ETH_PORT:        "5002"
+      TRX_HOST:        trx
+      TRX_PORT:        "5009"
+      BITCART_ADMIN_URL: http://localhost:4000
+      BITCART_CORS_DOMAINS: "http://localhost:4000,http://127.0.0.1:4000,http://localhost:5173,http://127.0.0.1:5173"
+    ports:
+      - "127.0.0.1:8000:8000"
     volumes:
       - bitcart_app_data:/app/data
     networks:
@@ -228,10 +209,9 @@ services:
       DB_USER:         bitcart
       DB_PASSWORD:     ${BITCART_DB_PASSWORD:-bitcart_secure_pass}
       REDIS_HOST:      redis://redis
-      BITCART_CRYPTOS: btc,eth,trx
-      BTC_HOST:        btc
-      BTC_PORT:        "5000"
-      BTC_NETWORK:     mainnet
+      BITCART_CRYPTOS: btc,trx
+      TRX_HOST:        trx
+      TRX_PORT:        "5009"
     volumes:
       - bitcart_app_data:/app/data
     networks:
@@ -265,7 +245,6 @@ volumes:
   uploads_data:
   bitcart_postgres_data:
   bitcart_btc_data:
-  bitcart_eth_data:
   bitcart_trx_data:
   bitcart_app_data:
 

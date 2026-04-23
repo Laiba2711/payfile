@@ -33,16 +33,10 @@ fi
 export $(grep -v '^#' .env | grep -v '^$' | xargs)
 
 # ── Domain resolution ──────────────────────────────────────────────────────────
-DOMAIN=${DOMAIN:-${DOMAIN_ENV:-""}}
+DOMAIN=${DOMAIN:-${DOMAIN_ENV:-"localhost"}}
 EMAIL=${EMAIL:-${OWNER_EMAIL:-""}}
 
-if [ -z "$DOMAIN" ]; then
-  warn "No domain provided. Running in HTTP-only / localhost mode."
-  SSL=false
-else
-  info "Domain: $DOMAIN"
-  SSL=true
-fi
+info "Domain: $DOMAIN"
 
 # ── Write DOMAIN to .env if not already there ──────────────────────────────────
 if ! grep -q "^DOMAIN=" .env; then
@@ -53,14 +47,18 @@ else
 fi
 
 # Update FRONTEND_URL and BACKEND_URL
-if [ "$SSL" = true ]; then
-  sed -i.bak "s|^FRONTEND_URL=.*|FRONTEND_URL=https://${DOMAIN}|" .env && rm -f .env.bak
-  sed -i.bak "s|^BACKEND_URL=.*|BACKEND_URL=https://${DOMAIN}|"   .env && rm -f .env.bak
+# In no-proxy/no-nginx mode, frontend is at port 5173 and backend is at port 5000
+if [ "$DOMAIN" = "localhost" ]; then
+  sed -i.bak "s|^FRONTEND_URL=.*|FRONTEND_URL=http://localhost:5173|" .env && rm -f .env.bak
+  sed -i.bak "s|^BACKEND_URL=.*|BACKEND_URL=http://localhost:5000|" .env && rm -f .env.bak
+else
+  sed -i.bak "s|^FRONTEND_URL=.*|FRONTEND_URL=http://${DOMAIN}:5173|" .env && rm -f .env.bak
+  sed -i.bak "s|^BACKEND_URL=.*|BACKEND_URL=http://${DOMAIN}:5000|" .env && rm -f .env.bak
 fi
 
 # ── Create required directories ────────────────────────────────────────────────
 info "Creating required directories..."
-mkdir -p nginx/certbot/conf nginx/certbot/www nginx/certbot/conf/live
+mkdir -p backend/uploads
 
 # ── Generate JWT secret if placeholder ────────────────────────────────────────
 JWT_VAL=$(grep "^JWT_SECRET=" .env | cut -d'=' -f2)
@@ -78,70 +76,6 @@ if [ -z "$WH_VAL" ] || [ "$WH_VAL" = "your_webhook_secret_here" ]; then
   success "Generated new BITCART_WEBHOOK_SECRET."
 fi
 
-# ── SSL Certificate Setup ──────────────────────────────────────────────────────
-if [ "$SSL" = true ]; then
-  CERT_PATH="nginx/certbot/conf/live/${DOMAIN}/fullchain.pem"
-
-  if [ -f "$CERT_PATH" ]; then
-    success "SSL certificate already exists for ${DOMAIN}."
-  else
-    info "Obtaining SSL certificate for ${DOMAIN} via Let's Encrypt..."
-
-    # Step 1: Start nginx in HTTP-only mode to answer ACME challenge
-    # We temporarily replace the nginx template with an HTTP-only version
-    cat > nginx/templates/default.conf.template.tmp << HTTPCONF
-server {
-    listen 80;
-    server_name ${DOMAIN} www.${DOMAIN};
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
-    location / { return 200 "Initialising SSL...\n"; add_header Content-Type text/plain; }
-}
-HTTPCONF
-    # Start just nginx and certbot for the ACME challenge
-    $COMPOSE up -d nginx certbot || true
-    sleep 5
-
-    # Step 2: Request the certificate
-    docker run --rm \
-      -v "$(pwd)/nginx/certbot/conf:/etc/letsencrypt" \
-      -v "$(pwd)/nginx/certbot/www:/var/www/certbot" \
-      certbot/certbot certonly \
-        --webroot \
-        --webroot-path=/var/www/certbot \
-        --email "${EMAIL}" \
-        --agree-tos \
-        --no-eff-email \
-        -d "${DOMAIN}" \
-        -d "www.${DOMAIN}" \
-        --non-interactive \
-      && success "SSL certificate obtained for ${DOMAIN}!" \
-      || error "Certbot failed. Make sure ${DOMAIN} points to this server's IP and port 80 is open."
-
-    # Clean up temp config
-    rm -f nginx/templates/default.conf.template.tmp
-
-    $COMPOSE down
-  fi
-fi
-
-# ── For localhost/no-domain: generate self-signed cert ────────────────────────
-if [ "$SSL" = false ]; then
-  warn "No domain — generating self-signed certificate for localhost."
-  mkdir -p nginx/certbot/conf/live/localhost
-  if [ ! -f "nginx/certbot/conf/live/localhost/fullchain.pem" ]; then
-    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-      -keyout nginx/certbot/conf/live/localhost/privkey.pem \
-      -out    nginx/certbot/conf/live/localhost/fullchain.pem \
-      -subj   "/C=US/ST=State/L=City/O=SatoshiBin/CN=localhost" 2>/dev/null
-    cp nginx/certbot/conf/live/localhost/fullchain.pem \
-       nginx/certbot/conf/live/localhost/chain.pem
-  fi
-  DOMAIN="localhost"
-  sed -i.bak "s|^DOMAIN=.*|DOMAIN=localhost|" .env && rm -f .env.bak
-  success "Self-signed cert ready."
-fi
 
 # ── Build and start all services ───────────────────────────────────────────────
 info "Building Docker images..."
@@ -168,16 +102,19 @@ echo ""
 echo -e "${GREEN}============================================================${NC}"
 echo -e "${GREEN}  ✅  SatoshiBin deployed successfully!${NC}"
 echo -e "${GREEN}============================================================${NC}"
-if [ "$SSL" = true ]; then
-  echo -e "  🌐  App:           https://${DOMAIN}"
-else
-  echo -e "  🌐  App:           http://localhost"
-fi
+# ── Summary ────────────────────────────────────────────────────────────────────
+echo ""
+echo -e "${GREEN}============================================================${NC}"
+echo -e "${GREEN}  ✅  SatoshiBin deployed successfully!${NC}"
+echo -e "${GREEN}============================================================${NC}"
+echo -e "  🌐  Frontend:      http://${DOMAIN}"
+echo -e "  🚀  Backend API:   http://${DOMAIN}:5000"
 echo -e "  🔧  Bitcart Admin: http://127.0.0.1:4000  (localhost only)"
 echo -e "  📋  Logs:          docker compose logs -f"
 echo -e "  ⏹️   Stop:          docker compose down"
-echo -e "  🔄  Update:        git pull && ./deploy.sh ${DOMAIN} ${EMAIL}"
+echo -e "  🔄  Update:        git pull && ./deploy.sh ${DOMAIN}"
 echo ""
+
 echo -e "${YELLOW}  Next steps:${NC}"
 echo -e "  1. Open Bitcart Admin (http://127.0.0.1:4000) and create your store + wallets"
 echo -e "  2. Copy the Store ID and Wallet IDs into .env"

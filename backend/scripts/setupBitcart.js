@@ -127,7 +127,6 @@ async function setupBitcartStore() {
       console.log('\n[Bitcart Setup] Verifying wallet configurations...');
       await verifyWallet(process.env.BITCART_WALLET_ID,             'BTC');
       await verifyWallet(process.env.BITCART_USDT_TRC20_WALLET_ID,  'USDT TRC20');
-      await verifyWallet(process.env.BITCART_USDT_ERC20_WALLET_ID,  'USDT ERC20');
       console.log('[Bitcart Setup] Wallet verification complete.\n');
 
       return; // Success — exit retry loop

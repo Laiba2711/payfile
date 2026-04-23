@@ -5,14 +5,14 @@ import Card from '../../../components/ui/Card';
 
 const AdminIncomeChart = ({ chartData }) => {
   return (
-    <Card className="p-8 min-h-[450px]">
+    <Card className="p-6 md:p-8 h-full flex flex-col">
         <div className="flex items-center justify-between mb-8">
             <h3 className="text-xl font-black text-payfile-maroon flex items-center gap-3">
                 <TrendingUp className="w-6 h-6 text-payfile-gold" />
                 Income stats (14 Days)
             </h3>
         </div>
-        <div className="h-[320px] w-full">
+        <div className="flex-1 w-full min-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData}>
                     <defs>

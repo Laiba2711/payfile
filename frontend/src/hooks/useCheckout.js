@@ -78,6 +78,7 @@ const useCheckout = (tokenId) => {
 
     const fileName = purchase?.file?.name ?? purchase?.sale?.file?.name ?? 'Your File';
     const fileSize = purchase?.file?.size ?? purchase?.sale?.file?.size;
+    const mimeType = purchase?.file?.mimeType ?? purchase?.sale?.file?.mimeType;
 
     return {
         loading,
@@ -91,7 +92,8 @@ const useCheckout = (tokenId) => {
         isExpired,
         displayStatus,
         fileName,
-        fileSize
+        fileSize,
+        mimeType
     };
 };
 

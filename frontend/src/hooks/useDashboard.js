@@ -217,6 +217,7 @@ const useDashboard = () => {
                 setSalePrice('');
                 setBtcAddress('');
                 setListingExpiry('');
+                closeSaleModal();
             }
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to create sale listing');
