@@ -71,27 +71,6 @@ services:
       retries: 5
       start_period: 30s
 
-  # ─── Bitcart PostgreSQL ─────────────────────────────────────────────────────
-  bitcart_postgres:
-    image: postgres:15-alpine
-    container_name: bitcart_postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB:       bitcart
-      POSTGRES_USER:     bitcart
-      POSTGRES_PASSWORD: ${BITCART_DB_PASSWORD:-bitcart_secure_pass}
-    volumes:
-      - bitcart_postgres_data:/var/lib/postgresql/data
-    networks:
-      payfile_net:
-        aliases:
-          - postgres
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bitcart"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # ─── Bitcart Redis ──────────────────────────────────────────────────────────
   bitcart_redis:
     image: redis:7-alpine
@@ -155,8 +134,6 @@ services:
     container_name: bitcart_api
     restart: unless-stopped
     depends_on:
-      bitcart_postgres:
-        condition: service_healthy
       bitcart_redis:
         condition: service_started
       bitcart_btc:
@@ -166,14 +143,19 @@ services:
       bitcart_api_init:
         condition: service_completed_successfully
     user: root
+    # `alembic upgrade head` auto-applies any pending migrations on every boot —
+    # safe because it's idempotent. Runs against Neon before gunicorn starts.
     command: sh -c "/app/.venv/bin/alembic upgrade head && gunicorn -c gunicorn.conf.py main:app"
     environment:
       BITCART_DEBUG:   "false"
-      DB_HOST:         postgres
-      DB_PORT:         "5432"
-      DB_DATABASE:     bitcart
-      DB_USER:         bitcart
-      DB_PASSWORD:     ${BITCART_DB_PASSWORD:-bitcart_secure_pass}
+      # Neon (managed Postgres). DB_* vars are split out of BITCART_DATABASE_URL
+      # in .env. PGSSLMODE is read by asyncpg — required because Neon enforces TLS.
+      DB_HOST:         ${BITCART_DB_HOST}
+      DB_PORT:         ${BITCART_DB_PORT:-5432}
+      DB_DATABASE:     ${BITCART_DB_NAME}
+      DB_USER:         ${BITCART_DB_USER}
+      DB_PASSWORD:     ${BITCART_DB_PASSWORD}
+      PGSSLMODE:       require
       REDIS_HOST:      redis://redis
       BITCART_CRYPTOS: btc,trx
       BTC_HOST:        btc
@@ -208,11 +190,12 @@ services:
         condition: service_healthy
     command: python worker.py
     environment:
-      DB_HOST:         postgres
-      DB_PORT:         "5432"
-      DB_DATABASE:     bitcart
-      DB_USER:         bitcart
-      DB_PASSWORD:     ${BITCART_DB_PASSWORD:-bitcart_secure_pass}
+      DB_HOST:         ${BITCART_DB_HOST}
+      DB_PORT:         ${BITCART_DB_PORT:-5432}
+      DB_DATABASE:     ${BITCART_DB_NAME}
+      DB_USER:         ${BITCART_DB_USER}
+      DB_PASSWORD:     ${BITCART_DB_PASSWORD}
+      PGSSLMODE:       require
       REDIS_HOST:      redis://redis
       BITCART_CRYPTOS: btc,trx
       TRX_HOST:        trx
@@ -248,7 +231,6 @@ services:
 volumes:
   payfile_db_data:
   uploads_data:
-  bitcart_postgres_data:
   bitcart_btc_data:
   bitcart_trx_data:
   bitcart_app_data:
