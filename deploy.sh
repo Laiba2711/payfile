@@ -46,15 +46,16 @@ else
   sed -i.bak "s|^DOMAIN=.*|DOMAIN=${DOMAIN}|" .env && rm -f .env.bak
 fi
 
-# Update FRONTEND_URL and BACKEND_URL
-# In no-proxy/no-nginx mode, frontend is at port 5173 and backend is at port 5000
+# Update FRONTEND_URL (browser-facing, so uses the host) and BACKEND_URL
+# (Bitcart callback URL — resolved over the Docker network, NOT the host).
 if [ "$DOMAIN" = "localhost" ]; then
   sed -i.bak "s|^FRONTEND_URL=.*|FRONTEND_URL=http://localhost:5173|" .env && rm -f .env.bak
-  sed -i.bak "s|^BACKEND_URL=.*|BACKEND_URL=http://localhost:5000|" .env && rm -f .env.bak
 else
   sed -i.bak "s|^FRONTEND_URL=.*|FRONTEND_URL=http://${DOMAIN}:5173|" .env && rm -f .env.bak
-  sed -i.bak "s|^BACKEND_URL=.*|BACKEND_URL=http://${DOMAIN}:5000|" .env && rm -f .env.bak
 fi
+# BACKEND_URL is always the internal Docker service name — Bitcart runs on the
+# same payfile_net network and reaches the backend via Docker DNS.
+sed -i.bak "s|^BACKEND_URL=.*|BACKEND_URL=http://backend:5000|" .env && rm -f .env.bak
 
 # ── Create required directories ────────────────────────────────────────────────
 info "Creating required directories..."
@@ -108,7 +109,7 @@ echo -e "${GREEN}============================================================${N
 echo -e "${GREEN}  ✅  SatoshiBin deployed successfully!${NC}"
 echo -e "${GREEN}============================================================${NC}"
 echo -e "  🌐  Frontend:      http://${DOMAIN}"
-echo -e "  🚀  Backend API:   http://${DOMAIN}:5000"
+echo -e "  🚀  Backend API:   http://${DOMAIN}:5001   (host port — container listens on 5000)"
 echo -e "  🔧  Bitcart Admin: http://127.0.0.1:4000  (localhost only)"
 echo -e "  📋  Logs:          docker compose logs -f"
 echo -e "  ⏹️   Stop:          docker compose down"

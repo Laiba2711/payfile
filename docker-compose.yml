@@ -9,9 +9,10 @@ services:
     restart: unless-stopped
     ports:
       - "5173:5173"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+    # No bind mount: the image bakes in the source + node_modules (including vite).
+    # Bind-mounting ./frontend here would overlay /app with the host dir and mask
+    # node_modules, causing "sh: vite: not found". For live-reload dev, run
+    # `cd frontend && npm run dev` outside Docker.
     networks:
       - payfile_net
     healthcheck:
@@ -30,10 +31,14 @@ services:
     restart: unless-stopped
     env_file: .env
     ports:
-      - "5000:5000"
+      # Host port 5001 to avoid conflict with macOS AirPlay Receiver on 5000.
+      # Internal container port stays 5000 (what the app listens on).
+      - "5001:5000"
     volumes:
-      - ./backend:/app
-      - /app/node_modules
+      # Only persist uploads. We intentionally do NOT bind-mount ./backend here —
+      # the Dockerfile bakes in the code and `npm ci` node_modules, and a bind
+      # mount would overlay both with whatever is on the host (commonly an empty
+      # node_modules, which crashes the container with "Cannot find module 'express'").
       - uploads_data:/app/uploads
     depends_on:
       mongodb:
