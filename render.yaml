@@ -42,8 +42,12 @@ services:
   - type: web
     name: payfile-backend
     runtime: docker
-    rootDir: backend
-    dockerfilePath: ./Dockerfile
+    # dockerfilePath and dockerContext are resolved from the REPO ROOT, not
+    # from rootDir. With rootDir: backend + dockerfilePath: ./Dockerfile,
+    # Render looks for /Dockerfile (repo root) and fails. So we omit rootDir
+    # and point dockerfilePath at the real location.
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
     plan: free
     healthCheckPath: /api/health
     envVars:
