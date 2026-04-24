@@ -25,13 +25,13 @@ services:
     buildCommand: npm ci && npm run build
     staticPublishPath: ./dist
     envVars:
-      # Baked into the Vite bundle at build time — Render resolves fromService
-      # refs before running buildCommand.
+      # Full backend URL including https://. `property: host` returns only the
+      # hostname (no protocol), which makes fetch treat it as a relative URL and
+      # the request falls through to the SPA rewrite on the frontend origin.
+      # Render service URLs follow <name>.onrender.com so this is safe to
+      # hardcode.
       - key: VITE_API_URL
-        fromService:
-          type: web
-          name: payfile-backend
-          property: host
+        value: https://payfile-backend.onrender.com
     routes:
       # SPA fallback: unknown paths go to index.html so React Router works.
       - type: rewrite
@@ -62,17 +62,12 @@ services:
         value: 7d
       - key: OWNER_EMAIL
         sync: false
-      # CORS allow-list — auto-wired to the frontend's public URL.
+      # CORS allow-list — must include the https:// protocol so it matches the
+      # Origin header the browser sends. `property: host` returns hostname only.
       - key: FRONTEND_URL
-        fromService:
-          type: web
-          name: payfile-frontend
-          property: host
+        value: https://payfile-frontend.onrender.com
       - key: BACKEND_URL
-        fromService:
-          type: web
-          name: payfile-backend
-          property: host
+        value: https://payfile-backend.onrender.com
       # Email (Brevo)
       - key: BREVO_API_KEY
         sync: false

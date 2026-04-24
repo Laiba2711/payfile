@@ -4,10 +4,15 @@ import axios from 'axios'
 import './index.css'
 import App from './App.jsx'
 
-// ── Global Axios Auth Interceptor ──────────────────────────────────────────
+// Baseline axios config. In local dev VITE_API_URL is empty and Vite's dev
+// server proxies /api → backend (see vite.config.js). In production (Render
+// static site), VITE_API_URL is the full backend origin (https://...) so
+// requests like axios.get('/api/files') become cross-origin calls to the
+// backend service instead of hitting the SPA rewrite on the frontend's own
+// domain.
+axios.defaults.baseURL = import.meta.env.VITE_API_URL || '';
+
 // Automatically attaches the JWT token stored in localStorage to every request.
-// This means protected API calls (like POST /api/purchases) will always include
-// the Authorization header without needing to set it manually in each hook.
 axios.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
