@@ -79,8 +79,10 @@ services:
       - key: BREVO_SENDER_NAME
         value: SatoshiBin
 
-  # ─── Bitcart API (private — only backend + admin talk to it) ──────────────
-  - type: pserv
+  # ─── Bitcart API (public — bitcart-admin's browser JS calls it directly) ──
+  # Security: API endpoints require authentication (API keys, JWT). Making
+  # the URL public is fine; knowing the URL doesn't grant access.
+  - type: web
     name: bitcart-api
     runtime: image
     image:
@@ -191,12 +193,12 @@ services:
         value: http://bitcart-api:8000
       - key: API_URL_BROWSER
         fromService:
-          type: pserv
+          type: web
           name: bitcart-api
           property: host
       - key: BITCART_ADMIN_API_URL
         fromService:
-          type: pserv
+          type: web
           name: bitcart-api
           property: host
       - key: BITCART_ADMIN_SERVER_API_URL
