@@ -1,0 +1,163 @@
+// PayFile Prisma schema — dedicated `payfile` database on Neon.
+// Prisma auto-applies migrations on boot via `prisma migrate deploy`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── User ─────────────────────────────────────────────────────────────────────
+enum Role {
+  user
+  admin
+}
+
+model User {
+  id                   String    @id @default(cuid())
+  firstName            String
+  lastName             String
+  email                String    @unique
+  password             String
+  role                 Role      @default(user)
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  files     File[]
+  sales     Sale[]
+  purchases Purchase[] @relation("SellerPurchases")
+}
+
+// ─── File ─────────────────────────────────────────────────────────────────────
+model File {
+  id             String    @id @default(cuid())
+  name           String
+  originalName   String
+  size           Int
+  mimeType       String
+  path           String
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  downloads      Int       @default(0)
+  price          Float     @default(0)
+  expiresAt      DateTime?
+  sharePassword  String?
+  shareExpiresAt DateTime?
+  previewPath    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  sales     Sale[]
+  purchases Purchase[]
+
+  @@index([userId])
+}
+
+// ─── Sale ─────────────────────────────────────────────────────────────────────
+enum Currency {
+  BTC
+  USDT
+}
+
+// Postgres enums can't be empty-string, so NONE replaces Mongoose's '' default.
+enum Network {
+  NONE
+  TRC20
+}
+
+enum SaleStatus {
+  active
+  expired
+  sold
+}
+
+model Sale {
+  id        String     @id @default(cuid())
+  fileId    String
+  file      File       @relation(fields: [fileId], references: [id])
+  sellerId  String
+  seller    User       @relation(fields: [sellerId], references: [id])
+  price     Float
+  currency  Currency   @default(BTC)
+  network   Network    @default(NONE)
+  address   String
+  expiresAt DateTime?
+  status    SaleStatus @default(active)
+  createdAt DateTime   @default(now())
+
+  purchases Purchase[]
+
+  @@index([sellerId])
+  @@index([fileId])
+}
+
+// ─── Purchase ────────────────────────────────────────────────────────────────
+enum PurchaseStatus {
+  pending
+  confirmed
+  expired
+}
+
+model Purchase {
+  id                    String         @id @default(cuid())
+  tokenId               String         @unique
+  saleId                String
+  sale                  Sale           @relation(fields: [saleId], references: [id])
+  fileId                String
+  file                  File           @relation(fields: [fileId], references: [id])
+  sellerId              String
+  seller                User           @relation("SellerPurchases", fields: [sellerId], references: [id])
+  status                PurchaseStatus @default(pending)
+  bitcartId             String?
+  bitcartPayoutId       String?
+  adminBitcartPayoutId  String?
+  sellerPayoutProcessed Boolean        @default(false)
+  adminPayoutProcessed  Boolean        @default(false)
+  payoutsProcessed      Boolean        @default(false)
+  checkoutUrl           String?
+  // Postgres has no TTL; a setInterval job in server.js purges expired pending rows.
+  pendingExpiresAt      DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  incomes Income[]
+
+  @@index([sellerId, status])
+  @@index([bitcartId])
+  @@index([pendingExpiresAt])
+  @@index([createdAt(sort: Desc)])
+}
+
+// ─── Income ──────────────────────────────────────────────────────────────────
+model Income {
+  id           String   @id @default(cuid())
+  amount       Float
+  currency     Currency @default(BTC)
+  purchaseId   String
+  purchase     Purchase @relation(fields: [purchaseId], references: [id])
+  tokenId      String
+  adminAddress String   @default("")
+  payoutSent   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([createdAt, currency])
+}
+
+// ─── Settings ────────────────────────────────────────────────────────────────
+// Singleton row — app code always upserts/reads where id = 1.
+model Settings {
+  id                    Int      @id @default(1)
+  adminBtcAddress       String   @default("bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh")
+  adminUsdtAddress      String   @default("0x71C7656EC7ab88b098defB751B7401B5f6d8976F")
+  adminUsdtTrc20Address String   @default("")
+  commissionRate        Float    @default(0.05)
+  btcWalletId           String   @default("")
+  usdtTrc20WalletId     String   @default("")
+  updatedAt             DateTime @updatedAt
+}

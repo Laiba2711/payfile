@@ -6,7 +6,7 @@
 const validateConfig = () => {
     // Hard-required: app cannot function at all without these
     const criticalVars = [
-        'MONGO_URI',
+        'DATABASE_URL',
         'JWT_SECRET',
     ];
 

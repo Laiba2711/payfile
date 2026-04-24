@@ -27,7 +27,9 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: payfile_backend
-    command: node server.js
+    # Apply any pending Prisma migrations against Neon, then start the server.
+    # Matches the CMD baked into the Dockerfile — keep in sync if either changes.
+    command: sh -c "npx prisma migrate deploy && node server.js"
     restart: unless-stopped
     env_file: .env
     ports:
@@ -40,36 +42,16 @@ services:
       # mount would overlay both with whatever is on the host (commonly an empty
       # node_modules, which crashes the container with "Cannot find module 'express'").
       - uploads_data:/app/uploads
-    depends_on:
-      mongodb:
-        condition: service_healthy
     networks:
       - payfile_net
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:5000/api/health"]
       interval: 30s
       timeout: 10s
-      start_period: 30s
+      # Neon is remote: first boot runs `prisma migrate deploy` before the server
+      # binds. 60s is plenty on a schema that already has the init migration applied.
+      start_period: 60s
       retries: 3
-
-  # ─── MongoDB Database ───────────────────────────────────────────────────────
-  mongodb:
-    image: mongo:7-jammy
-    container_name: payfile_mongodb
-    restart: unless-stopped
-    environment:
-      MONGO_INITDB_DATABASE: payfile
-    volumes:
-      - payfile_db_data:/data/db
-    # No external ports — security hardening
-    networks:
-      - payfile_net
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
   # ─── Bitcart Redis ──────────────────────────────────────────────────────────
   bitcart_redis:
@@ -178,7 +160,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 60s
+      # Neon is remote (internet round-trips per migration) so first-boot alembic
+      # can take ~2min through all 25+ migrations. During start_period, failures
+      # do NOT count against retries — gives migrations room without going red.
+      start_period: 800s
 
   # ─── Bitcart Worker ─────────────────────────────────────────────────────────
   bitcart_worker:
@@ -229,7 +214,6 @@ services:
       - payfile_net
 
 volumes:
-  payfile_db_data:
   uploads_data:
   bitcart_btc_data:
   bitcart_trx_data:

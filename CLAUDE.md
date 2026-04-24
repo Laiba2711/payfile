@@ -85,15 +85,27 @@ Internal `Sale.currency` is `'BTC' | 'USDT'` with an optional `network` field. B
 
 If ERC20 needs to ship, all four sites must change together. Never pass raw `'USDT'` to Bitcart — it will be rejected.
 
-### Models (MongoDB via Mongoose)
+### Models (Neon Postgres via Prisma)
 
-`backend/models/`:
-- `User` — auth, role (`user`|`admin`), hashed password-reset token with 10-minute expiry
+Schema: `backend/prisma/schema.prisma`. Prisma client singleton: `backend/prisma/client.js`. Migrations live in `backend/prisma/migrations/` and are **auto-applied on every backend boot** via `npx prisma migrate deploy` — both the local compose `command` and the Dockerfile `CMD` run it before `node server.js`.
+
+- `User` — auth, role enum (`user`|`admin`), hashed password-reset token with 10-minute expiry
 - `File` — uploaded file metadata, owner, physical path under `backend/uploads/`
-- `Sale` — price + currency/network + seller payout address, status (`active`|`expired`|`sold`)
-- `Purchase` — links Sale + file + seller; tracks Bitcart invoice/payout IDs and the idempotency flags above; TTL index on `pendingExpiresAt`
+- `Sale` — price + currency (`BTC`|`USDT`) + network (`NONE`|`TRC20` — Prisma enum can't be empty so `NONE` replaces Mongo's `''`; `utils/enumMap.js` converts back to `''` for the client) + seller payout address
+- `Purchase` — links Sale + file + seller; tracks Bitcart invoice/payout IDs and the idempotency flags above. Mongo's TTL index is replaced by `startPendingPurchaseCleanupJob` in `server.js` (every 5 min, deletes pending purchases whose `pendingExpiresAt` has passed).
 - `Income` — append-only commission-received log for admin dashboard
-- `Settings` — singleton doc; admin can override commission rate and payout addresses via the admin UI (env still wins for addresses)
+- `Settings` — singleton row (always `id = 1`). Admin can override commission rate and payout addresses via the admin UI (env still wins for addresses).
+
+**Response compatibility**: Postgres uses `id`, but the frontend still reads `_id`. Controllers alias `id` as `_id` in the response payload so no frontend changes were needed.
+
+### One Neon project, two databases
+
+| DB | Owner | Schema management |
+|---|---|---|
+| `neondb` | Bitcart | alembic (auto on bitcart_api boot) |
+| `payfile` | PayFile backend | Prisma (auto on backend boot) |
+
+Same Neon host, same credentials, different database names. `BITCART_DB_NAME=neondb` and PayFile's `DATABASE_URL` ends in `/payfile?sslmode=require`. No local MongoDB or local Postgres container exists anywhere.
 
 ### Backend error handling
 

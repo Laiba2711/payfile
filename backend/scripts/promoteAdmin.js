@@ -1,34 +1,26 @@
-const mongoose = require('mongoose');
-const User = require('../models/User');
+// Edit the email below then run:
+//   node backend/scripts/promoteAdmin.js
 const dotenv = require('dotenv');
-
 dotenv.config({ path: '.env' });
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/payfile';
+const prisma = require('../prisma/client');
 
-async function promoteAdmin() {
+const EMAIL = 'laibashah2711@gmail.com';
+
+(async () => {
   try {
-    await mongoose.connect(MONGO_URI);
-    console.log('Connected to MongoDB');
-
-    const email = 'laibashah2711@gmail.com';
-    const user = await User.findOneAndUpdate(
-      { email: email },
-      { role: 'admin' },
-      { new: true }
-    );
-
-    if (user) {
-      console.log(`Successfully promoted ${email} to admin.`);
-    } else {
-      console.log(`User with email ${email} not found.`);
-    }
-
-    await mongoose.disconnect();
+    const user = await prisma.user.update({
+      where: { email: EMAIL },
+      data: { role: 'admin' },
+    });
+    console.log(`Successfully promoted ${user.email} to admin.`);
+    await prisma.$disconnect();
   } catch (err) {
+    if (err.code === 'P2025') {
+      console.log(`User with email ${EMAIL} not found.`);
+      process.exit(1);
+    }
     console.error('Error promoting user:', err);
     process.exit(1);
   }
-}
-
-promoteAdmin();
+})();

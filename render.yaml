@@ -1,0 +1,250 @@
+# Render Blueprint for PayFile / SatoshiBin.
+# Deploy with: New → Blueprint → point at this repo.
+# Requires: Neon Postgres URL + MongoDB Atlas URL + Bitcart wallet IDs.
+# Persistent disks (bitcart_btc, bitcart_trx, bitcart_api) require a paid plan.
+
+services:
+
+  # ─── Frontend (Vite SPA + nginx) ──────────────────────────────────────────
+  - type: web
+    name: payfile-frontend
+    runtime: docker
+    rootDir: frontend
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    envVars:
+      # Baked into the bundle at build time. Points at the backend service URL.
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: payfile-backend
+          property: host
+
+  # ─── Backend (Express + Mongoose) ─────────────────────────────────────────
+  - type: web
+    name: payfile-backend
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # PORT is auto-injected by Render; server.js reads it.
+      # Neon Postgres URL — same connection string you used locally (points at the `payfile` DB).
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: OWNER_EMAIL
+        sync: false
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: payfile-frontend
+          property: host
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: payfile-backend
+          property: host
+      # Bitcart is a private service; reach it over Render's private network.
+      - key: BITCART_HOST
+        value: http://bitcart-api:8000
+      - key: BITCART_API_KEY
+        sync: false
+      - key: BITCART_STORE_ID
+        sync: false
+      - key: BITCART_WALLET_ID
+        sync: false
+      - key: BITCART_USDT_TRC20_WALLET_ID
+        sync: false
+      - key: BITCART_WEBHOOK_SECRET
+        generateValue: true
+      # Admin payout addresses
+      - key: ADMIN_BTC_ADDRESS
+        sync: false
+      - key: ADMIN_USDT_TRC20_ADDRESS
+        sync: false
+      - key: ADMIN_USDT_ADDRESS
+        sync: false
+      # Email (Brevo)
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false
+      - key: BREVO_SENDER_NAME
+        value: SatoshiBin
+
+  # ─── Bitcart API (private — only backend + admin talk to it) ──────────────
+  - type: pserv
+    name: bitcart-api
+    runtime: image
+    image:
+      url: docker.io/bitcart/bitcart:stable
+    plan: starter
+    # gunicorn config file binds 0.0.0.0:8000; we override start command to
+    # (1) run alembic migrations, (2) bind gunicorn to Render's $PORT.
+    dockerCommand: sh -c "/app/.venv/bin/alembic upgrade head && exec gunicorn -c gunicorn.conf.py -b 0.0.0.0:$PORT main:app"
+    disk:
+      name: bitcart-app-data
+      mountPath: /app/data
+      sizeGB: 1
+    envVars:
+      - key: BITCART_DEBUG
+        value: "false"
+      - key: BITCART_CRYPTOS
+        value: btc,trx
+      # Neon (required — enter in Render UI on first deploy)
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_DATABASE
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: PGSSLMODE
+        value: require
+      # Managed Redis
+      - key: REDIS_HOST
+        fromService:
+          type: keyvalue
+          name: bitcart-redis
+          property: connectionString
+      # Daemon hosts — Render's internal DNS uses service names
+      - key: BTC_HOST
+        value: bitcart-btc
+      - key: BTC_PORT
+        value: "5000"
+      - key: TRX_HOST
+        value: bitcart-trx
+      - key: TRX_PORT
+        value: "5009"
+      - key: BITCART_ADMIN_URL
+        fromService:
+          type: web
+          name: bitcart-admin
+          property: host
+      - key: BITCART_CORS_DOMAINS
+        fromService:
+          type: web
+          name: bitcart-admin
+          property: host
+
+  # ─── Bitcart Worker (background job processor) ────────────────────────────
+  - type: worker
+    name: bitcart-worker
+    runtime: image
+    image:
+      url: docker.io/bitcart/bitcart:stable
+    plan: starter
+    dockerCommand: python worker.py
+    envVars:
+      - key: BITCART_CRYPTOS
+        value: btc,trx
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_DATABASE
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: PGSSLMODE
+        value: require
+      - key: REDIS_HOST
+        fromService:
+          type: keyvalue
+          name: bitcart-redis
+          property: connectionString
+      - key: TRX_HOST
+        value: bitcart-trx
+      - key: TRX_PORT
+        value: "5009"
+
+  # ─── Bitcart Admin UI (public, low-traffic dashboard) ─────────────────────
+  - type: web
+    name: bitcart-admin
+    runtime: image
+    image:
+      url: docker.io/bitcart/bitcart-admin:stable
+    plan: starter
+    dockerCommand: yarn start
+    envVars:
+      # The admin image's Nuxt server listens on NUXT_PORT. Point it at Render's $PORT.
+      - key: NUXT_HOST
+        value: 0.0.0.0
+      - key: NUXT_PORT
+        fromService:
+          type: web
+          name: bitcart-admin
+          envVarKey: PORT
+      - key: API_URL
+        value: http://bitcart-api:8000
+      - key: API_URL_BROWSER
+        fromService:
+          type: pserv
+          name: bitcart-api
+          property: host
+      - key: BITCART_ADMIN_API_URL
+        fromService:
+          type: pserv
+          name: bitcart-api
+          property: host
+      - key: BITCART_ADMIN_SERVER_API_URL
+        value: http://bitcart-api:8000
+      - key: BITCART_ADMIN_URL
+        fromService:
+          type: web
+          name: bitcart-admin
+          property: host
+
+  # ─── Bitcart BTC daemon (private, needs disk for blockchain state) ────────
+  - type: pserv
+    name: bitcart-btc
+    runtime: image
+    image:
+      url: docker.io/bitcart/bitcart-btc:stable
+    plan: starter
+    disk:
+      name: bitcart-btc-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: BTC_NETWORK
+        value: mainnet
+      - key: BTC_SERVER
+        value: electrum.blockstream.info:50002
+
+  # ─── Bitcart TRX daemon (private) ─────────────────────────────────────────
+  - type: pserv
+    name: bitcart-trx
+    runtime: image
+    image:
+      url: docker.io/bitcart/bitcart-trx:stable
+    plan: starter
+    disk:
+      name: bitcart-trx-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: TRX_NETWORK
+        value: mainnet
+      - key: TRX_SERVER
+        value: https://api.trongrid.io
+      - key: TRX_API_KEY
+        sync: false
+
+  # ─── Managed Redis (replaces bitcart_redis container) ─────────────────────
+  - type: keyvalue
+    name: bitcart-redis
+    plan: starter
+    ipAllowList: []   # private — only Render services can connect

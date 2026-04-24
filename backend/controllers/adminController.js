@@ -1,48 +1,42 @@
-const User = require('../models/User');
-const Sale = require('../models/Sale');
-const Purchase = require('../models/Purchase');
-const Settings = require('../models/Settings');
-const Income = require('../models/Income');
+const fetch = require('node-fetch');
+const prisma = require('../prisma/client');
+const { networkFromDb } = require('../utils/enumMap');
 const { generatePDFReport } = require('../utils/reportGenerator');
 const { triggerPurchasePayouts } = require('./purchaseController');
-const fetch = require('node-fetch');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 
-
-// ── Helper: load dynamic commission rate ──────────────────────────────────────
 const getCommissionRate = async () => {
-  const settings = await Settings.findOne();
+  const settings = await prisma.settings.findUnique({ where: { id: 1 } });
   return parseFloat((settings && settings.commissionRate) || process.env.COMMISSION_RATE || 0.05);
 };
 
-// ── Get Admin Statistics ──────────────────────────────────────────────────────
-exports.getStats = catchAsync(async (req, res, next) => {
-  const totalUsers = await User.countDocuments();
-  
-  // Load dynamic commission rate — NOT hard-coded 0.05
+// ── Admin stats ──────────────────────────────────────────────────────────────
+exports.getStats = catchAsync(async (req, res) => {
+  const totalUsers = await prisma.user.count();
   const commissionRate = await getCommissionRate();
-  
-  const confirmedPurchases = await Purchase.find({ status: 'confirmed' }).populate('sale');
-  
+
+  const confirmedPurchases = await prisma.purchase.findMany({
+    where: { status: 'confirmed' },
+    include: { sale: true },
+  });
+
   let totalBtcRevenue = 0;
   let totalUsdtRevenue = 0;
   let totalBtcCommission = 0;
   let totalUsdtCommission = 0;
-  
-  confirmedPurchases.forEach(purchase => {
-    if (purchase.sale) {
-      const price = parseFloat(purchase.sale.price);
-      const commission = price * commissionRate;
-      if (purchase.sale.currency === 'USDT') {
-        totalUsdtRevenue += price;
-        totalUsdtCommission += commission;
-      } else {
-        totalBtcRevenue += price;
-        totalBtcCommission += commission;
-      }
+  for (const p of confirmedPurchases) {
+    if (!p.sale) continue;
+    const price = parseFloat(p.sale.price);
+    const commission = price * commissionRate;
+    if (p.sale.currency === 'USDT') {
+      totalUsdtRevenue += price;
+      totalUsdtCommission += commission;
+    } else {
+      totalBtcRevenue += price;
+      totalBtcCommission += commission;
     }
-  });
+  }
 
   res.status(200).json({
     status: 'success',
@@ -53,55 +47,69 @@ exports.getStats = catchAsync(async (req, res, next) => {
       totalUsdtRevenue: totalUsdtRevenue.toFixed(6),
       totalBtcCommission: totalBtcCommission.toFixed(8),
       totalUsdtCommission: totalUsdtCommission.toFixed(6),
-      commissionRate
-    }
+      commissionRate,
+    },
   });
 });
 
-
-// ── Get All Users ─────────────────────────────────────────────────────────────
-exports.getUsers = catchAsync(async (req, res, next) => {
+// ── Users list with optional search ──────────────────────────────────────────
+exports.getUsers = catchAsync(async (req, res) => {
   const { search } = req.query;
-  let query = {};
-  
-  if (search) {
-    query = {
-      $or: [
-        { email: { $regex: search, $options: 'i' } },
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } }
-      ]
-    };
-  }
+  const where = search
+    ? {
+        OR: [
+          { email: { contains: search, mode: 'insensitive' } },
+          { firstName: { contains: search, mode: 'insensitive' } },
+          { lastName: { contains: search, mode: 'insensitive' } },
+        ],
+      }
+    : {};
 
-  const users = await User.find(query).sort('-createdAt');
+  const users = await prisma.user.findMany({
+    where,
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      role: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
   res.status(200).json({
     status: 'success',
     results: users.length,
-    data: { users }
+    data: { users: users.map((u) => ({ ...u, _id: u.id })) },
   });
 });
 
-// ── Get Commission History ────────────────────────────────────────────────────
-exports.getHistory = catchAsync(async (req, res, next) => {
+// ── Commission history ──────────────────────────────────────────────────────
+exports.getHistory = catchAsync(async (req, res) => {
   const commissionRate = await getCommissionRate();
 
-  const history = await Purchase.find({ status: 'confirmed' })
-    .populate('sale')
-    .populate('seller', 'firstName lastName email')
-    .sort('-updatedAt');
+  const history = await prisma.purchase.findMany({
+    where: { status: 'confirmed' },
+    include: {
+      sale: true,
+      seller: { select: { firstName: true, lastName: true, email: true } },
+    },
+    orderBy: { updatedAt: 'desc' },
+  });
 
-  const formattedHistory = history.map(item => {
+  const formattedHistory = history.map((item) => {
     const currency = item.sale ? item.sale.currency : 'BTC';
     const dp = currency === 'BTC' ? 8 : 6;
     const price = item.sale ? parseFloat(item.sale.price) : 0;
     return {
-      id: item._id,
+      id: item.id,
       tokenId: item.tokenId,
       seller: item.seller,
       price,
       currency,
-      network: item.sale ? item.sale.network : '',
+      network: item.sale ? networkFromDb(item.sale.network) : '',
       commission: (price * commissionRate).toFixed(dp),
       date: item.updatedAt,
       payoutsProcessed: item.payoutsProcessed,
@@ -110,52 +118,35 @@ exports.getHistory = catchAsync(async (req, res, next) => {
     };
   });
 
-  res.status(200).json({
-    status: 'success',
-    data: { history: formattedHistory }
-  });
+  res.status(200).json({ status: 'success', data: { history: formattedHistory } });
 });
 
-
-// ── Settings ──────────────────────────────────────────────────────────────────
-exports.getSettings = catchAsync(async (req, res, next) => {
-  let settings = await Settings.findOne();
-  if (!settings) {
-    settings = await Settings.create({});
-  }
+// ── Settings (singleton upsert) ──────────────────────────────────────────────
+exports.getSettings = catchAsync(async (req, res) => {
+  const settings = await prisma.settings.upsert({
+    where: { id: 1 },
+    update: {},
+    create: { id: 1 },
+  });
   res.status(200).json({ status: 'success', data: { settings } });
 });
 
 exports.updateSettings = catchAsync(async (req, res, next) => {
-  const { 
-    adminBtcAddress, 
-    adminUsdtAddress, 
-    adminUsdtTrc20Address, 
-    commissionRate,
-    btcWalletId,
-    usdtTrc20WalletId,
-  } = req.body;
-  
-  let settings = await Settings.findOne();
-  if (!settings) {
-    settings = new Settings();
-  }
-  
+  const { adminBtcAddress, adminUsdtAddress, adminUsdtTrc20Address, commissionRate, btcWalletId, usdtTrc20WalletId } = req.body;
+
+  const current = await prisma.settings.upsert({ where: { id: 1 }, update: {}, create: { id: 1 } });
+
   const bitcartChanges = [];
   const BITCART_HOST = process.env.BITCART_HOST;
   const BITCART_API_KEY = process.env.BITCART_API_KEY;
 
-  // Sync wallet address to Bitcart
   const syncWallet = async (id, address, label) => {
     if (!id || !address || !BITCART_HOST || !BITCART_API_KEY) return;
     try {
       const response = await fetch(`${BITCART_HOST}/wallets/${id}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${BITCART_API_KEY}`
-        },
-        body: JSON.stringify({ address })
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${BITCART_API_KEY}` },
+        body: JSON.stringify({ address }),
       });
       if (!response.ok) {
         const errData = await response.json();
@@ -168,107 +159,92 @@ exports.updateSettings = catchAsync(async (req, res, next) => {
     }
   };
 
-  // Detect changes and sync if IDs exist
-  if (adminBtcAddress && adminBtcAddress !== settings.adminBtcAddress) {
-    settings.adminBtcAddress = adminBtcAddress;
-    await syncWallet(btcWalletId || settings.btcWalletId || process.env.BITCART_WALLET_ID, adminBtcAddress, 'BTC');
+  const updateData = {};
+  if (adminBtcAddress && adminBtcAddress !== current.adminBtcAddress) {
+    updateData.adminBtcAddress = adminBtcAddress;
+    await syncWallet(btcWalletId || current.btcWalletId || process.env.BITCART_WALLET_ID, adminBtcAddress, 'BTC');
   }
-  
-  if (adminUsdtTrc20Address && adminUsdtTrc20Address !== settings.adminUsdtTrc20Address) {
-    settings.adminUsdtTrc20Address = adminUsdtTrc20Address;
-    await syncWallet(usdtTrc20WalletId || settings.usdtTrc20WalletId || process.env.BITCART_USDT_TRC20_WALLET_ID, adminUsdtTrc20Address, 'USDT TRC20');
+  if (adminUsdtTrc20Address && adminUsdtTrc20Address !== current.adminUsdtTrc20Address) {
+    updateData.adminUsdtTrc20Address = adminUsdtTrc20Address;
+    await syncWallet(
+      usdtTrc20WalletId || current.usdtTrc20WalletId || process.env.BITCART_USDT_TRC20_WALLET_ID,
+      adminUsdtTrc20Address,
+      'USDT TRC20'
+    );
   }
-
-
-
-  // Update other fields
-  if (adminUsdtAddress)    settings.adminUsdtAddress   = adminUsdtAddress;
+  if (adminUsdtAddress) updateData.adminUsdtAddress = adminUsdtAddress;
   if (commissionRate !== undefined) {
     const rate = parseFloat(commissionRate);
     if (isNaN(rate) || rate < 0 || rate > 1) {
       return next(new AppError('Commission rate must be a number between 0 and 1', 400));
     }
-    settings.commissionRate = rate;
+    updateData.commissionRate = rate;
   }
-  if (btcWalletId)         settings.btcWalletId        = btcWalletId;
-  if (usdtTrc20WalletId)   settings.usdtTrc20WalletId  = usdtTrc20WalletId;
-  
-  await settings.save();
+  if (btcWalletId) updateData.btcWalletId = btcWalletId;
+  if (usdtTrc20WalletId) updateData.usdtTrc20WalletId = usdtTrc20WalletId;
 
-  res.status(200).json({
-    status: 'success',
-    data: { settings, bitcartSync: bitcartChanges }
-  });
+  const settings = await prisma.settings.update({ where: { id: 1 }, data: updateData });
+  res.status(200).json({ status: 'success', data: { settings, bitcartSync: bitcartChanges } });
 });
 
-
-// ── Get Income Stats for Chart (last 14 days) ─────────────────────────────────
-exports.getIncomeStats = catchAsync(async (req, res, next) => {
+// ── Income stats (last 14 days, grouped by date + currency) ─────────────────
+// Mongo used $dateToString aggregation. Postgres equivalent: raw SQL on date_trunc.
+exports.getIncomeStats = catchAsync(async (req, res) => {
   const fourteenDaysAgo = new Date();
   fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
 
-  const stats = await Income.aggregate([
-    {
-      $match: { createdAt: { $gte: fourteenDaysAgo } }
-    },
-    {
-      $group: {
-        _id: {
-          date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-          currency: '$currency'
-        },
-        amount: { $sum: '$amount' }   // Works correctly because amount is stored as Number
-      }
-    },
-    { $sort: { '_id.date': 1 } }
-  ]);
+  // $queryRaw — Prisma.raw-safe: fourteenDaysAgo is a Date parameter, NOT string-interpolated.
+  const rows = await prisma.$queryRaw`
+    SELECT
+      to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS date,
+      currency,
+      SUM(amount)::float AS amount
+    FROM "Income"
+    WHERE "createdAt" >= ${fourteenDaysAgo}
+    GROUP BY date, currency
+    ORDER BY date ASC
+  `;
 
-  // Format for frontend grouping by date
   const formattedStats = {};
-  stats.forEach(item => {
-    const date = item._id.date;
-    if (!formattedStats[date]) {
-      formattedStats[date] = { date, btc: 0, usdt: 0 };
-    }
-    if (item._id.currency === 'USDT') {
-      formattedStats[date].usdt = parseFloat(item.amount.toFixed(6));
+  for (const item of rows) {
+    const date = item.date;
+    if (!formattedStats[date]) formattedStats[date] = { date, btc: 0, usdt: 0 };
+    if (item.currency === 'USDT') {
+      formattedStats[date].usdt = parseFloat(Number(item.amount).toFixed(6));
     } else {
-      formattedStats[date].btc = parseFloat(item.amount.toFixed(8));
+      formattedStats[date].btc = parseFloat(Number(item.amount).toFixed(8));
     }
-  });
+  }
 
-  res.status(200).json({
-    status: 'success',
-    data: { stats: Object.values(formattedStats) }
-  });
+  res.status(200).json({ status: 'success', data: { stats: Object.values(formattedStats) } });
 });
 
-// ── Download PDF Report ───────────────────────────────────────────────────────
-exports.downloadReport = catchAsync(async (req, res, next) => {
-  // Load dynamic commission rate
+// ── Download PDF Report ─────────────────────────────────────────────────────
+exports.downloadReport = catchAsync(async (req, res) => {
   const commissionRate = await getCommissionRate();
 
-  const totalUsers = await User.countDocuments();
-  const confirmedPurchases = await Purchase.find({ status: 'confirmed' }).populate('sale');
-  
+  const totalUsers = await prisma.user.count();
+  const confirmedPurchases = await prisma.purchase.findMany({
+    where: { status: 'confirmed' },
+    include: { sale: true },
+  });
+
   let totalBtcRevenue = 0;
   let totalUsdtRevenue = 0;
   let totalBtcCommission = 0;
   let totalUsdtCommission = 0;
-  
-  confirmedPurchases.forEach(purchase => {
-    if (purchase.sale) {
-      const price = parseFloat(purchase.sale.price);
-      const commission = price * commissionRate;
-      if (purchase.sale.currency === 'USDT') {
-        totalUsdtRevenue += price;
-        totalUsdtCommission += commission;
-      } else {
-        totalBtcRevenue += price;
-        totalBtcCommission += commission;
-      }
+  for (const p of confirmedPurchases) {
+    if (!p.sale) continue;
+    const price = parseFloat(p.sale.price);
+    const commission = price * commissionRate;
+    if (p.sale.currency === 'USDT') {
+      totalUsdtRevenue += price;
+      totalUsdtCommission += commission;
+    } else {
+      totalBtcRevenue += price;
+      totalBtcCommission += commission;
     }
-  });
+  }
 
   const stats = {
     totalUsers,
@@ -277,15 +253,19 @@ exports.downloadReport = catchAsync(async (req, res, next) => {
     totalUsdtRevenue: totalUsdtRevenue.toFixed(6),
     totalBtcCommission: totalBtcCommission.toFixed(8),
     totalUsdtCommission: totalUsdtCommission.toFixed(6),
-    commissionRate: `${(commissionRate * 100).toFixed(1)}%`
+    commissionRate: `${(commissionRate * 100).toFixed(1)}%`,
   };
 
-  const historyData = await Purchase.find({ status: 'confirmed' })
-    .populate('sale')
-    .populate('seller', 'firstName lastName email')
-    .sort('-updatedAt');
+  const historyData = await prisma.purchase.findMany({
+    where: { status: 'confirmed' },
+    include: {
+      sale: true,
+      seller: { select: { firstName: true, lastName: true, email: true } },
+    },
+    orderBy: { updatedAt: 'desc' },
+  });
 
-  const history = historyData.map(item => {
+  const history = historyData.map((item) => {
     const currency = item.sale ? item.sale.currency : 'BTC';
     const dp = currency === 'BTC' ? 8 : 6;
     const price = item.sale ? parseFloat(item.sale.price) : 0;
@@ -295,8 +275,8 @@ exports.downloadReport = catchAsync(async (req, res, next) => {
       seller: item.seller,
       price,
       currency,
-      network: item.sale ? item.sale.network : '',
-      commission: (price * commissionRate).toFixed(dp)
+      network: item.sale ? networkFromDb(item.sale.network) : '',
+      commission: (price * commissionRate).toFixed(dp),
     };
   });
 
@@ -306,19 +286,19 @@ exports.downloadReport = catchAsync(async (req, res, next) => {
   generatePDFReport({ stats, history }, res);
 });
 
-// ── Admin Purchase Management ─────────────────────────────────────────────────
+// ── Admin purchase management ───────────────────────────────────────────────
 exports.verifyPurchaseAdmin = catchAsync(async (req, res, next) => {
   const { tokenId } = req.params;
-  const purchase = await Purchase.findOne({ tokenId })
-    .populate('sale')
-    .populate('file')
-    .populate('seller', 'firstName lastName email');
-  
-  if (!purchase) {
-    return next(new AppError('Purchase token not found', 404));
-  }
+  let purchase = await prisma.purchase.findUnique({
+    where: { tokenId },
+    include: {
+      sale: true,
+      file: true,
+      seller: { select: { firstName: true, lastName: true, email: true } },
+    },
+  });
+  if (!purchase) return next(new AppError('Purchase token not found', 404));
 
-  // Smart Sync: If pending, check Bitcart for live status
   if (purchase.status === 'pending' && purchase.bitcartId) {
     const BITCART_HOST = process.env.BITCART_HOST;
     const BITCART_API_KEY = process.env.BITCART_API_KEY;
@@ -326,19 +306,20 @@ exports.verifyPurchaseAdmin = catchAsync(async (req, res, next) => {
     if (BITCART_HOST && BITCART_API_KEY) {
       try {
         const response = await fetch(`${BITCART_HOST}/invoices/${purchase.bitcartId}`, {
-          headers: { 'Authorization': `Bearer ${BITCART_API_KEY}` }
+          headers: { Authorization: `Bearer ${BITCART_API_KEY}` },
         });
         const data = await response.json();
-
         if (response.ok && (data.status === 'complete' || data.status === 'paid')) {
-          purchase.status = 'confirmed';
-          purchase.pendingExpiresAt = undefined;
-          await purchase.save();
-
-          // Trigger payouts in background
-          triggerPurchasePayouts(purchase._id).catch(e =>
-            console.error('[Admin Verify] Payout error:', e)
-          );
+          purchase = await prisma.purchase.update({
+            where: { id: purchase.id },
+            data: { status: 'confirmed', pendingExpiresAt: null },
+            include: {
+              sale: true,
+              file: true,
+              seller: { select: { firstName: true, lastName: true, email: true } },
+            },
+          });
+          triggerPurchasePayouts(purchase.id).catch((e) => console.error('[Admin Verify] Payout error:', e));
         }
       } catch (err) {
         console.error('[Admin Verify] Bitcart fetch error:', err.message);
@@ -346,34 +327,25 @@ exports.verifyPurchaseAdmin = catchAsync(async (req, res, next) => {
     }
   }
 
-  res.status(200).json({ status: 'success', data: { purchase } });
+  res.status(200).json({ status: 'success', data: { purchase: { ...purchase, _id: purchase.id } } });
 });
-
 
 exports.confirmPurchaseAdmin = catchAsync(async (req, res, next) => {
   const { tokenId } = req.params;
-  const purchase = await Purchase.findOne({ tokenId }).populate('sale');
-  
-  if (!purchase) {
-    return next(new AppError('Purchase token not found', 404));
+  const existing = await prisma.purchase.findUnique({ where: { tokenId }, include: { sale: true } });
+  if (!existing) return next(new AppError('Purchase token not found', 404));
+
+  let purchase = existing;
+  if (existing.status !== 'confirmed') {
+    purchase = await prisma.purchase.update({
+      where: { id: existing.id },
+      data: { status: 'confirmed', pendingExpiresAt: null },
+      include: { sale: true },
+    });
+    triggerPurchasePayouts(purchase.id).catch((e) => console.error('[Admin Confirm] Payout error:', e));
+  } else if (!existing.payoutsProcessed) {
+    triggerPurchasePayouts(existing.id).catch((e) => console.error('[Admin Confirm] Payout retry error:', e));
   }
 
-  if (purchase.status !== 'confirmed') {
-    purchase.status = 'confirmed';
-    purchase.pendingExpiresAt = undefined;
-    await purchase.save();
-
-    // Trigger payouts — this was missing before and is the root cause of seller
-    // never receiving funds after an admin manual confirm
-    triggerPurchasePayouts(purchase._id).catch(e =>
-      console.error('[Admin Confirm] Payout error:', e)
-    );
-  } else if (!purchase.payoutsProcessed) {
-    // Already confirmed but payouts may have failed — retry
-    triggerPurchasePayouts(purchase._id).catch(e =>
-      console.error('[Admin Confirm] Payout retry error:', e)
-    );
-  }
-
-  res.status(200).json({ status: 'success', data: { purchase } });
+  res.status(200).json({ status: 'success', data: { purchase: { ...purchase, _id: purchase.id } } });
 });
