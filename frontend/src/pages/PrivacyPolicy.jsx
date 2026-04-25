@@ -139,7 +139,7 @@ const PrivacyPolicy = () => {
             <div className="p-10 rounded-[40px] bg-payfile-cream border border-payfile-gold/20 text-center">
               <h3 className="text-xl font-black text-payfile-maroon uppercase tracking-tight mb-4">Questions regarding policy?</h3>
               <p className="text-gray-500 mb-8 max-w-lg mx-auto">Our security team is ready to assist with any inquiries regarding the SatoshiBin Network's data infrastructure.</p>
-              <a href="mailto:support@payfile.network" className="inline-block px-10 py-4 bg-payfile-maroon text-payfile-gold rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-payfile-maroon-dark transition-all shadow-xl shadow-payfile-maroon/20">Contact Node Admin</a>
+              <a href="mailto:support@satoshibin.com" className="inline-block px-10 py-4 bg-payfile-maroon text-payfile-gold rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-payfile-maroon-dark transition-all shadow-xl shadow-payfile-maroon/20">Contact Node Admin</a>
             </div>
           </section>
         </div>

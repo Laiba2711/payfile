@@ -113,7 +113,7 @@ const TermsOfService = () => {
 
         <div className="mt-20 text-center border-t border-payfile-maroon/5 pt-10">
           <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-4">Questions? Please Contact</p>
-          <a href="mailto:legal@payfile.network" className="text-payfile-maroon font-black hover:text-payfile-gold transition-colors underline underline-offset-8 decoration-payfile-gold/30">legal@payfile.network</a>
+          <a href="mailto:legal@satoshibin.com" className="text-payfile-maroon font-black hover:text-payfile-gold transition-colors underline underline-offset-8 decoration-payfile-gold/30">legal@satoshibin.com</a>
         </div>
       </div>
     </div>

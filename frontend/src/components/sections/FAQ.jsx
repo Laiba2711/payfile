@@ -17,7 +17,7 @@ const FAQ = () => {
     },
     {
       question: 'What file types are supported?',
-      answer: 'You can upload any file type to SatoshiBin. The Free Tier currently supports files up to 2MB, with larger limits available for premium users.',
+      answer: 'You can upload almost any file type to SatoshiBin, including images, videos (up to 500MB), documents, and archives. For security reasons, we do not allow executable files (.exe, .msi) or shell scripts (.sh, .bat).',
     },
     {
       question: 'How do I get started?',
