@@ -1,0 +1,20 @@
+admin.satoshibin.com {
+    reverse_proxy admin:4000
+}
+
+bitcart-api.satoshibin.com {
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+        Access-Control-Allow-Credentials "true"
+        defer
+    }
+    
+    @options {
+        method OPTIONS
+    }
+    respond @options 204
+
+    reverse_proxy api:8000
+}

@@ -1,0 +1,133 @@
+services:
+
+  postgres:
+    image: postgres:13-alpine
+    container_name: bitcart_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bitcart
+      POSTGRES_USER: bitcart
+      POSTGRES_PASSWORD: bitcart_pass
+    volumes:
+      - bitcart_postgres_data:/var/lib/postgresql/data
+    networks:
+      - bitcart_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: bitcart_redis
+    restart: unless-stopped
+    networks:
+      - bitcart_net
+
+  btc:
+    image: bitcart/bitcart-btc:stable
+    container_name: bitcart_btc
+    restart: unless-stopped
+    environment:
+      BTC_NETWORK: mainnet
+    volumes:
+      - bitcart_btc_data:/data
+    networks:
+      - bitcart_net
+
+  trx:
+    image: bitcart/bitcart-trx:stable
+    container_name: bitcart_trx
+    restart: unless-stopped
+    environment:
+      TRX_NETWORK: mainnet
+      TRX_SERVER: https://api.trongrid.io
+      TRX_API_KEY: b1989b66-9744-4be5-97e3-f03cdd27dc75
+    volumes:
+      - bitcart_trx_data:/data
+    networks:
+      - bitcart_net
+
+  api:
+    image: bitcart/bitcart:stable
+    container_name: bitcart_api
+    restart: unless-stopped
+    command: sh -c "cd /app && .venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000"
+    environment:
+      BITCART_DEBUG: "false"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_DATABASE: bitcart
+      DB_USER: bitcart
+      DB_PASSWORD: bitcart_pass
+      DB_POOL_SIZE: "5"
+      DB_MAX_OVERFLOW: "5"
+      REDIS_HOST: redis://redis
+      BITCART_CRYPTOS: btc,trx
+      BTC_HOST: btc
+      BTC_PORT: "5000"
+      BTC_NETWORK: mainnet
+      TRX_HOST: trx
+      TRX_PORT: "5009"
+      BITCART_ADMIN_URL: https://admin.satoshibin.com
+      BITCART_CORS_DOMAINS: "*"
+    volumes:
+      - bitcart_app_data:/app/data
+    networks:
+      - bitcart_net
+
+  worker:
+    image: bitcart/bitcart:stable
+    container_name: bitcart_worker
+    restart: unless-stopped
+    command: sh -c "cd /app && .venv/bin/python worker.py"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_DATABASE: bitcart
+      DB_USER: bitcart
+      DB_PASSWORD: bitcart_pass
+      REDIS_HOST: redis://redis
+      BITCART_CRYPTOS: btc,trx
+      BTC_HOST: btc
+      BTC_PORT: "5000"
+      TRX_HOST: trx
+      TRX_PORT: "5009"
+    volumes:
+      - bitcart_app_data:/app/data
+    networks:
+      - bitcart_net
+
+  admin:
+    image: bitcart/bitcart-admin:stable
+    container_name: bitcart_admin
+    restart: unless-stopped
+    entrypoint: ["yarn", "start"]
+    environment:
+      BITCART_ADMIN_API_URL: https://bitcart-api.satoshibin.com
+      BITCART_ADMIN_URL: https://admin.satoshibin.com
+      NODE_OPTIONS: "--max-old-space-size=256"
+    networks:
+      - bitcart_net
+
+  caddy:
+    image: caddy:alpine
+    container_name: bitcart_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - bitcart_caddy_data:/data
+      - bitcart_caddy_config:/config
+    networks:
+      - bitcart_net
+
+volumes:
+  bitcart_postgres_data:
+  bitcart_btc_data:
+  bitcart_trx_data:
+  bitcart_app_data:
+  bitcart_caddy_data:
+  bitcart_caddy_config:
+
+networks:
+  bitcart_net:
+    driver: bridge
