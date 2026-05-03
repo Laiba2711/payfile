@@ -38,7 +38,7 @@ const AdminSidebar = ({ onLogout, isOpen, onClose }) => {
                             <h1 
                                 className="text-xl font-black text-payfile-maroon tracking-tight"
                                 style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-                            >Pay<span className="text-payfile-gold">File</span></h1>
+                            >Satoshi<span className="text-payfile-gold">Bin</span></h1>
                             <p className="text-[10px] text-gray-400 uppercase tracking-[0.2em] font-black">Admin Panel</p>
                         </div>
                     </div>

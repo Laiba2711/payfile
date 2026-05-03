@@ -89,9 +89,12 @@ const PurchasePage = () => {
             <div className="py-10 text-center relative overflow-hidden rounded-3xl bg-payfile-maroon/5 border border-payfile-maroon/5">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-payfile-gold/30 to-transparent"></div>
               <p className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.4em] mb-4">Price</p>
-              <div className="flex flex-col items-center">
-                <span className="text-6xl font-black text-payfile-maroon tracking-tighter mb-2">
-                  {sale.totalPrice} <span className="text-payfile-gold text-2xl">{sale.currency}</span>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-4xl sm:text-5xl md:text-6xl font-black text-payfile-maroon tracking-tighter break-all">
+                  {sale.totalPrice}
+                </span>
+                <span className="text-payfile-gold text-lg md:text-2xl font-black uppercase tracking-[0.2em]">
+                  {sale.currency}
                 </span>
               </div>
             </div>

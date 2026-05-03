@@ -10,11 +10,13 @@ const PaymentInfo = ({ payment, network }) => {
     <div className="space-y-8 animate-fade-in">
         <div className="relative overflow-hidden rounded-[32px] border-2 border-payfile-gold/20 bg-payfile-maroon/5 p-8 text-center">
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em] mb-4">Total Amount</p>
-            <div className="flex items-baseline justify-center gap-3 mb-6">
-                <span className="text-5xl font-black tracking-tighter text-payfile-maroon">
+            <div className="flex flex-col items-center gap-1 mb-6">
+                <span className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-payfile-maroon break-all">
                     {payment.amount}
                 </span>
-                <span className="text-xl font-black text-payfile-gold">{payment.currency}</span>
+                <span className="text-lg md:text-xl font-black text-payfile-gold uppercase tracking-widest">
+                    {payment.currency}
+                </span>
             </div>
             <div className="flex justify-center">
                 <CopyBtn text={String(payment.amount)} label="Copy Amount" />

@@ -189,7 +189,7 @@ const triggerPurchasePayouts = async (purchaseId) => {
     const commissionRate = parseFloat(settings.commissionRate) || 0.05;
     const currency = sale.currency || 'BTC';
     const network = networkFromDb(sale.network);
-    const dp = currency === 'BTC' ? 8 : 2;
+    const dp = currency === 'BTC' ? 8 : 6;
     const sellerAmount = parseFloat(sale.price);
     const commissionAmount = parseFloat((sellerAmount * commissionRate).toFixed(dp));
 
