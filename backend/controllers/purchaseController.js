@@ -119,31 +119,26 @@ exports.createPurchase = catchAsync(async (req, res, next) => {
     wallet: walletId ? 'PROVIDED' : 'MISSING'
   });
 
-  console.time(`[Purchase][${saleId}] Bitcart Invoice`);
+  console.log(`📡 [Purchase][${saleId}] Calling Bitcart: ${BITCART_HOST}/invoices`);
   let response;
   try {
-    response = await fetchWithTimeout(`${BITCART_HOST}/invoices`, {
+    response = await fetch(`${BITCART_HOST}/invoices`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${BITCART_API_KEY}` },
       body: JSON.stringify(invoiceBody),
-    }, 45000); // 45s timeout for invoice creation
+    });
   } catch (err) {
-    console.timeEnd(`[Purchase][${saleId}] Bitcart Invoice`);
-    console.timeEnd(`[Purchase][${saleId}] Total`);
     return next(new AppError(`Payment provider unreachable: ${err.message}`, 503));
   }
-  console.timeEnd(`[Purchase][${saleId}] Bitcart Invoice`);
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    console.timeEnd(`[Purchase][${saleId}] Total`);
     return next(new AppError(data.detail || 'Failed to create payment invoice', 400));
   }
 
   const tokenId = 'PAY-' + crypto.randomBytes(4).toString('hex').toUpperCase();
   const pendingExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
-  console.time(`[Purchase][${saleId}] Create Record`);
   const purchase = await prisma.purchase.create({
     data: {
       tokenId,
@@ -157,8 +152,6 @@ exports.createPurchase = catchAsync(async (req, res, next) => {
     },
   });
   console.timeEnd(`[Purchase][${saleId}] Create Record`);
-
-  console.timeEnd(`[Purchase][${saleId}] Total`);
   res.status(201).json({ status: 'success', data: { purchase: { ...purchase, _id: purchase.id } } });
 });
 
@@ -221,8 +214,7 @@ const createBitcartPayout = async ({ amount, bitcartCurrency, destination, walle
     wallet_id: resolvedWallet,
   };
 
-  try {
-    const res = await fetchWithTimeout(`${BITCART_HOST}/payouts`, {
+  const res = await fetch(`${BITCART_HOST}/payouts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${BITCART_API_KEY}` },
       body: JSON.stringify(payoutBody),
@@ -234,7 +226,6 @@ const createBitcartPayout = async ({ amount, bitcartCurrency, destination, walle
       console.error(`[Payout] Bitcart rejected payout: ${errMsg}`);
       return { ok: false, error: errMsg };
     }
-    console.log(`[Payout] Success: created payout ID ${data.id}`);
     return { ok: true, payoutId: data.id, status: data.status };
   } catch (err) {
     console.error(`[Payout] Network error: ${err.message}`);
