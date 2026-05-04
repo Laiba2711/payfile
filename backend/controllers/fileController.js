@@ -108,8 +108,8 @@ exports.publicDownloadFile = async (req, res) => {
     if (!token) return res.status(401).json({ status: 'fail', message: 'Purchase token required' });
 
     const purchase = await prisma.purchase.findUnique({ where: { tokenId: token } });
-    if (!purchase || purchase.status !== 'confirmed') {
-      return res.status(403).json({ status: 'fail', message: 'Invalid or unconfirmed purchase token' });
+    if (!purchase || purchase.status !== 'completed') {
+      return res.status(403).json({ status: 'fail', message: 'Download locked: Payouts are still processing. Please refresh in 1 minute.' });
     }
 
     const file = await prisma.file.findUnique({ where: { id: req.params.id } });

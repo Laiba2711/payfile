@@ -30,13 +30,13 @@ const useCheckout = (tokenId) => {
     }, [fetchData]);
 
     useEffect(() => {
-        if (!data || data.purchase?.status === 'confirmed') {
+        if (!data || data.purchase?.status === 'completed') {
             clearInterval(pollingRef.current);
             return;
         }
         pollingRef.current = setInterval(async () => {
             const status = await fetchData(true);
-            if (status === 'confirmed') clearInterval(pollingRef.current);
+            if (status === 'completed') clearInterval(pollingRef.current);
         }, 10000);
         return () => clearInterval(pollingRef.current);
     }, [data, fetchData]);
@@ -72,9 +72,11 @@ const useCheckout = (tokenId) => {
     const purchase = data?.purchase;
     const invoice = data?.invoice;
     const payment = getPaymentInfo();
-    const isConfirmed = purchase?.status === 'confirmed';
+    const isConfirmed = purchase?.status === 'completed';
+    const isProcessing = purchase?.status === 'confirmed';
     const isExpired = invoice?.status === 'expired' || invoice?.status === 'invalid';
-    const displayStatus = isConfirmed ? 'confirmed' : isExpired ? 'expired' : 'pending';
+    
+    const displayStatus = isConfirmed ? 'confirmed' : isProcessing ? 'processing' : isExpired ? 'expired' : 'pending';
 
     const fileName = purchase?.file?.name ?? purchase?.sale?.file?.name ?? 'Your File';
     const fileSize = purchase?.file?.size ?? purchase?.sale?.file?.size;

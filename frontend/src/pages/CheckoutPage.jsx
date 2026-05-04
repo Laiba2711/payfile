@@ -100,6 +100,14 @@ const CheckoutPage = () => {
 
             {isConfirmed ? (
               <ConfirmationState handleDownload={handleDownload} />
+            ) : displayStatus === 'processing' ? (
+              <div className="text-center py-12 space-y-6">
+                  <RefreshCw className="w-16 h-16 text-payfile-gold mx-auto animate-spin" />
+                  <div>
+                      <h2 className="text-2xl font-black">Processing Funds</h2>
+                      <p className="text-gray-500 text-sm mt-3 font-medium">Payment received! Unlocking your file once funds are distributed...</p>
+                  </div>
+              </div>
             ) : isExpired ? (
               <div className="text-center py-12 space-y-6">
                   <XCircle className="w-16 h-16 text-red-100 mx-auto" />

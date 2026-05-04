@@ -214,12 +214,13 @@ const createBitcartPayout = async ({ amount, bitcartCurrency, destination, walle
     wallet_id: resolvedWallet,
   };
 
-  const res = await fetch(`${BITCART_HOST}/payouts`, {
+  try {
+    const res = await fetch(`${BITCART_HOST}/payouts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${BITCART_API_KEY}` },
       body: JSON.stringify(payoutBody),
-    }, 30000); // 30s timeout
-    
+    });
+
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const errMsg = data.detail || data.message || JSON.stringify(data);
@@ -352,9 +353,13 @@ const triggerPurchasePayouts = async (purchaseId) => {
     if (sellerPayoutOk && adminPayoutOk) {
       await prisma.purchase.update({
         where: { id: purchase.id },
-        data: { payoutsProcessed: true, pendingExpiresAt: null },
+        data: { 
+          status: 'completed', 
+          payoutsProcessed: true, 
+          pendingExpiresAt: null 
+        },
       });
-      console.log(`🎉 [Payouts][${purchase.tokenId}] Order fully processed.`);
+      console.log(`🎉 [Payouts][${purchase.tokenId}] Order fully processed and COMPLETED.`);
     }
   } catch (err) {
     console.error('❌ [Payouts] Fatal error in triggerPurchasePayouts:', err.message);
@@ -513,9 +518,9 @@ exports.getCheckoutData = async (req, res) => {
     let current = purchase;
     if (current.bitcartId && BITCART_HOST && BITCART_API_KEY) {
       try {
-        const invoiceRes = await fetchWithTimeout(`${BITCART_HOST}/invoices/${current.bitcartId}`, {
+        const invoiceRes = await fetch(`${BITCART_HOST}/invoices/${current.bitcartId}`, {
           headers: { Authorization: `Bearer ${BITCART_API_KEY}`, 'Content-Type': 'application/json' },
-        }, 15000); // 15s timeout for status checks
+        });
         if (invoiceRes.ok) {
           invoiceData = await invoiceRes.json();
           if ((invoiceData.status === 'complete' || invoiceData.status === 'paid') && current.status === 'pending') {
@@ -526,7 +531,7 @@ exports.getCheckoutData = async (req, res) => {
             });
             console.log(`📢 [Sync] Purchase ${current.tokenId} auto-marked CONFIRMED via polling.`);
             triggerPurchasePayouts(current.id).catch((e) => console.error('Payout sync error:', e));
-          } else if ((invoiceData.status === 'complete' || invoiceData.status === 'paid') && !current.payoutsProcessed) {
+          } else if ((invoiceData.status === 'complete' || invoiceData.status === 'paid') && current.status === 'confirmed' && !current.payoutsProcessed) {
             triggerPurchasePayouts(current.id).catch((e) => console.error('Payout retry poll error:', e));
           }
         }
