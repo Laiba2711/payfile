@@ -112,7 +112,8 @@ exports.createPurchase = catchAsync(async (req, res, next) => {
     store_id: BITCART_STORE_ID,
     order_id: saleId,
     notification_url: `${backendUrl}/api/purchases/bitcart-webhook`,
-    currency: bitcartCurrency,
+    currency: sale.currency === 'BTC' ? 'BTC' : 'USD', // Pricing currency
+    cryptos: [bitcartCurrency], // Force the specific crypto payment method
   };
   if (walletId) invoiceBody.wallet_id = walletId;
 
