@@ -8,16 +8,28 @@ const AppError = require('../utils/AppError');
 // ─── Bitcart currency code mapping ──────────────────────────────────────────
 // Bitcart uses its own currency codes that differ from our internal names.
 // BTC → 'BTC' | USDT TRC20 → 'USDTTRX' | USDT ERC20 → 'USDTETH'
-const getBitcartCurrencyCode = (currency, network) => {
+// BTC → 'BTC' | USDT TRC20 → 'USDT' (Bitcart recognizes the network via wallet_id)
+const getBitcartCurrencyCode = (currency) => {
   if (currency === 'BTC') return 'BTC';
-  if (currency === 'USDT') return 'USDTTRX';
+  if (currency === 'USDT') return 'USDT';
   return currency;
 };
 
+// ─── Settings Cache ─────────────────────────────────────────────────────────
+let settingsCache = null;
+let settingsCacheTime = 0;
+const CACHE_TTL = 60 * 1000; // 1 minute
+
 // Merge env-level config with DB Settings (env always wins for addresses).
-const loadSettings = async () => {
+const loadSettings = async (forceRefresh = false) => {
+  const now = Date.now();
+  if (!forceRefresh && settingsCache && now - settingsCacheTime < CACHE_TTL) {
+    return settingsCache;
+  }
+
+  console.log('[Settings] Loading configuration from Environment/Database...');
   const db = (await prisma.settings.findUnique({ where: { id: 1 } })) || {};
-  return {
+  settingsCache = {
     adminBtcAddress: process.env.ADMIN_BTC_ADDRESS || db.adminBtcAddress || '',
     adminUsdtAddress: process.env.ADMIN_USDT_ADDRESS || db.adminUsdtAddress || '',
     adminUsdtTrc20Address: process.env.ADMIN_USDT_TRC20_ADDRESS || db.adminUsdtTrc20Address || '',
@@ -25,35 +37,71 @@ const loadSettings = async () => {
     btcWalletId: process.env.BITCART_WALLET_ID || db.btcWalletId || '',
     usdtTrc20WalletId: process.env.BITCART_USDT_TRC20_WALLET_ID || db.usdtTrc20WalletId || '',
   };
+  
+  console.log('[Settings] Current Wallet IDs:', {
+    btc: settingsCache.btcWalletId ? 'SET' : 'MISSING',
+    usdt: settingsCache.usdtTrc20WalletId ? 'SET' : 'MISSING'
+  });
+
+  settingsCacheTime = now;
+  return settingsCache;
+};
+
+// ─── Fetch with Timeout ─────────────────────────────────────────────────────
+const fetchWithTimeout = async (url, options = {}, timeout = 30000) => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    if (error.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeout / 1000}s`);
+    }
+    throw error;
+  }
 };
 
 // ── POST /api/purchases ─────────────────────────────────────────────────────
 // Buyer initiates a purchase: create a Bitcart invoice for (seller price + commission).
 exports.createPurchase = catchAsync(async (req, res, next) => {
   const { saleId } = req.body;
-  const sale = await prisma.sale.findUnique({ where: { id: saleId }, include: { file: true } });
-  if (!sale) return next(new AppError('Sale not found', 404));
+  console.time(`[Purchase][${saleId}] Total`);
+
+  console.time(`[Purchase][${saleId}] DB Lookups`);
+  const [sale, settings] = await Promise.all([
+    prisma.sale.findUnique({ where: { id: saleId }, include: { file: true } }),
+    loadSettings(),
+  ]);
+  console.timeEnd(`[Purchase][${saleId}] DB Lookups`);
+
+  if (!sale) {
+    console.timeEnd(`[Purchase][${saleId}] Total`);
+    return next(new AppError('Sale not found', 404));
+  }
 
   const BITCART_HOST = process.env.BITCART_HOST;
   const BITCART_API_KEY = process.env.BITCART_API_KEY;
   const BITCART_STORE_ID = process.env.BITCART_STORE_ID;
+
   if (!BITCART_HOST || !BITCART_API_KEY || !BITCART_STORE_ID) {
+    console.timeEnd(`[Purchase][${saleId}] Total`);
     return next(new AppError('Payment system not configured on server', 500));
   }
 
-  const settings = await loadSettings();
   const commissionRate = parseFloat(settings.commissionRate) || 0.05;
-
   const dp = sale.currency === 'BTC' ? 8 : 6;
   const sellerAmount = parseFloat(sale.price);
   const commissionAmount = parseFloat((sellerAmount * commissionRate).toFixed(dp));
   const totalAmount = parseFloat((sellerAmount + commissionAmount).toFixed(dp));
 
   const walletId = sale.currency === 'USDT' ? settings.usdtTrc20WalletId : settings.btcWalletId;
-
   const bitcartCurrency = getBitcartCurrencyCode(sale.currency, networkFromDb(sale.network));
-
-  // BACKEND_URL must be the Docker-internal service name so Bitcart reaches us.
   const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
 
   const invoiceBody = {
@@ -65,21 +113,37 @@ exports.createPurchase = catchAsync(async (req, res, next) => {
   };
   if (walletId) invoiceBody.wallet_id = walletId;
 
-  const response = await fetch(`${BITCART_HOST}/invoices`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${BITCART_API_KEY}` },
-    body: JSON.stringify(invoiceBody),
+  console.log(`🚀 [Purchase][${saleId}] Creating Bitcart Invoice:`, {
+    price: totalAmount,
+    currency: bitcartCurrency,
+    wallet: walletId ? 'PROVIDED' : 'MISSING'
   });
 
-  const data = await response.json();
+  console.time(`[Purchase][${saleId}] Bitcart Invoice`);
+  let response;
+  try {
+    response = await fetchWithTimeout(`${BITCART_HOST}/invoices`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${BITCART_API_KEY}` },
+      body: JSON.stringify(invoiceBody),
+    }, 45000); // 45s timeout for invoice creation
+  } catch (err) {
+    console.timeEnd(`[Purchase][${saleId}] Bitcart Invoice`);
+    console.timeEnd(`[Purchase][${saleId}] Total`);
+    return next(new AppError(`Payment provider unreachable: ${err.message}`, 503));
+  }
+  console.timeEnd(`[Purchase][${saleId}] Bitcart Invoice`);
+
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    console.timeEnd(`[Purchase][${saleId}] Total`);
     return next(new AppError(data.detail || 'Failed to create payment invoice', 400));
   }
 
   const tokenId = 'PAY-' + crypto.randomBytes(4).toString('hex').toUpperCase();
-  // 48h cleanup window (replaces Mongo's TTL index). See startPendingPurchaseCleanupJob in server.js.
   const pendingExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
+  console.time(`[Purchase][${saleId}] Create Record`);
   const purchase = await prisma.purchase.create({
     data: {
       tokenId,
@@ -92,7 +156,9 @@ exports.createPurchase = catchAsync(async (req, res, next) => {
       pendingExpiresAt,
     },
   });
+  console.timeEnd(`[Purchase][${saleId}] Create Record`);
 
+  console.timeEnd(`[Purchase][${saleId}] Total`);
   res.status(201).json({ status: 'success', data: { purchase: { ...purchase, _id: purchase.id } } });
 });
 
@@ -145,7 +211,7 @@ const createBitcartPayout = async ({ amount, bitcartCurrency, destination, walle
   if (!resolvedWallet) return { ok: false, error: 'No wallet ID available for payout' };
   if (!destination) return { ok: false, error: 'No destination address for payout' };
 
-  console.log(`[Payout] ${amount} ${bitcartCurrency} → ${destination} (wallet: ${resolvedWallet})`);
+  console.log(`[Payout] Initiating: ${amount} ${bitcartCurrency} → ${destination} (wallet: ${resolvedWallet})`);
 
   const payoutBody = {
     amount,
@@ -155,17 +221,25 @@ const createBitcartPayout = async ({ amount, bitcartCurrency, destination, walle
     wallet_id: resolvedWallet,
   };
 
-  const res = await fetch(`${BITCART_HOST}/payouts`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${BITCART_API_KEY}` },
-    body: JSON.stringify(payoutBody),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const errMsg = data.detail || data.message || JSON.stringify(data);
-    return { ok: false, error: errMsg };
+  try {
+    const res = await fetchWithTimeout(`${BITCART_HOST}/payouts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${BITCART_API_KEY}` },
+      body: JSON.stringify(payoutBody),
+    }, 30000); // 30s timeout
+    
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const errMsg = data.detail || data.message || JSON.stringify(data);
+      console.error(`[Payout] Bitcart rejected payout: ${errMsg}`);
+      return { ok: false, error: errMsg };
+    }
+    console.log(`[Payout] Success: created payout ID ${data.id}`);
+    return { ok: true, payoutId: data.id, status: data.status };
+  } catch (err) {
+    console.error(`[Payout] Network error: ${err.message}`);
+    return { ok: false, error: err.message };
   }
-  return { ok: true, payoutId: data.id, status: data.status };
 };
 
 // ── Shared payout trigger ──────────────────────────────────────────────────
@@ -448,9 +522,9 @@ exports.getCheckoutData = async (req, res) => {
     let current = purchase;
     if (current.bitcartId && BITCART_HOST && BITCART_API_KEY) {
       try {
-        const invoiceRes = await fetch(`${BITCART_HOST}/invoices/${current.bitcartId}`, {
+        const invoiceRes = await fetchWithTimeout(`${BITCART_HOST}/invoices/${current.bitcartId}`, {
           headers: { Authorization: `Bearer ${BITCART_API_KEY}`, 'Content-Type': 'application/json' },
-        });
+        }, 15000); // 15s timeout for status checks
         if (invoiceRes.ok) {
           invoiceData = await invoiceRes.json();
           if ((invoiceData.status === 'complete' || invoiceData.status === 'paid') && current.status === 'pending') {

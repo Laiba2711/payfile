@@ -66,8 +66,19 @@ exports.downloadFile = catchAsync(async (req, res, next) => {
   const file = await prisma.file.findUnique({ where: { id: req.params.id } });
   if (!file) return next(new AppError('File not found', 404));
   if (file.userId !== req.user.id) return next(new AppError('Unauthorized access', 403));
-  if (!fs.existsSync(file.path)) return next(new AppError('File missing on server', 404));
-  res.download(file.path, file.name);
+
+  // Resolve path relative to current environment's uploads folder
+  const fileName = path.basename(file.path);
+  const resolvedPath = path.join(__dirname, '../uploads', fileName);
+
+  console.log(`[Download] Private download: ${file.name} (Resolved: ${resolvedPath})`);
+
+  if (!fs.existsSync(resolvedPath)) {
+    console.error(`[Download] File missing on server: ${resolvedPath}`);
+    return next(new AppError('File missing on server', 404));
+  }
+
+  res.download(resolvedPath, file.name);
 });
 
 exports.deleteFile = async (req, res) => {
@@ -105,11 +116,23 @@ exports.publicDownloadFile = async (req, res) => {
     if (!file || file.id !== purchase.fileId) {
       return res.status(404).json({ status: 'fail', message: 'File not matched' });
     }
-    if (!fs.existsSync(file.path)) {
+
+    // Resolve path relative to current environment's uploads folder
+    const fileName = path.basename(file.path);
+    const resolvedPath = path.join(__dirname, '../uploads', fileName);
+
+    console.log(`[Download] Public download for token ${token}: ${file.name} (Resolved: ${resolvedPath})`);
+
+    if (!fs.existsSync(resolvedPath)) {
+      console.error(`[Download] File missing on server: ${resolvedPath}`);
       return res.status(404).json({ status: 'fail', message: 'File not found on server' });
     }
-    res.download(file.path, file.name);
+
+    // Set headers to force download and prevent "black screen" previews
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.name)}"`);
+    res.download(resolvedPath, file.name);
   } catch (err) {
+    console.error('[Download] Public download error:', err);
     res.status(400).json({ status: 'fail', message: err.message });
   }
 };
@@ -176,19 +199,37 @@ exports.sharedDownloadFile = async (req, res) => {
       const isMatch = await bcrypt.compare(password, file.sharePassword);
       if (!isMatch) return res.status(401).json({ status: 'fail', message: 'Incorrect password' });
     }
-    if (!fs.existsSync(file.path)) {
+    // Resolve path relative to current environment's uploads folder
+    const fileName = path.basename(file.path);
+    const resolvedPath = path.join(__dirname, '../uploads', fileName);
+
+    console.log(`[SharedDownload] Download: ${file.name} (Resolved: ${resolvedPath})`);
+
+    if (!fs.existsSync(resolvedPath)) {
+      console.error(`[SharedDownload] File missing on server: ${resolvedPath}`);
       return res.status(404).json({ status: 'fail', message: 'File not found on server' });
     }
-    res.download(file.path, file.name);
+
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.name)}"`);
+    res.download(resolvedPath, file.name);
   } catch (err) {
+    console.error('[SharedDownload] Error:', err);
     res.status(400).json({ status: 'fail', message: err.message });
   }
 };
 
 exports.getPreviewFile = catchAsync(async (req, res, next) => {
   const file = await prisma.file.findUnique({ where: { id: req.params.id } });
-  if (!file || !file.previewPath || !fs.existsSync(file.previewPath)) {
+  if (!file || !file.previewPath) {
     return next(new AppError('Preview not available', 404));
   }
-  res.sendFile(file.previewPath);
+
+  // Resolve preview path relative to current environment's uploads folder
+  const previewFileName = path.basename(file.previewPath);
+  const resolvedPreviewPath = path.join(__dirname, '../uploads', previewFileName);
+
+  if (!fs.existsSync(resolvedPreviewPath)) {
+    return next(new AppError('Preview missing on server', 404));
+  }
+  res.sendFile(resolvedPreviewPath);
 });
