@@ -12,5 +12,6 @@ router.use(authMiddleware.protect);
 
 router.post('/', saleController.createSale);
 router.get('/', saleController.getSales);
+router.delete('/:id', saleController.deleteSale);
 
 module.exports = router;

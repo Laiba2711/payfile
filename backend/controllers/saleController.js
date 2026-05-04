@@ -99,3 +99,28 @@ exports.getPublicSale = catchAsync(async (req, res, next) => {
     },
   });
 });
+
+exports.deleteSale = catchAsync(async (req, res, next) => {
+  const sale = await prisma.sale.findUnique({
+    where: { id: req.params.id },
+    include: { purchases: true },
+  });
+
+  if (!sale) return next(new AppError('Listing not found', 404));
+  if (sale.sellerId !== req.user.id) return next(new AppError('You do not own this listing', 403));
+
+  // Safety: If the listing has confirmed or completed purchases, we shouldn't hard-delete it.
+  const hasSuccessfulPurchases = sale.purchases.some(p => p.status === 'confirmed' || p.status === 'completed');
+  if (hasSuccessfulPurchases) {
+    return next(new AppError('Cannot delete listing with successful transactions. You can expire it instead.', 400));
+  }
+
+  // Delete associated pending/expired purchases first to avoid FK constraint errors.
+  await prisma.purchase.deleteMany({ where: { saleId: sale.id } });
+  await prisma.sale.delete({ where: { id: sale.id } });
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Listing deleted successfully',
+  });
+});

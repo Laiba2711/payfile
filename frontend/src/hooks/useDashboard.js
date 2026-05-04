@@ -225,6 +225,25 @@ const useDashboard = () => {
         }
     };
 
+    const handleDeleteSale = async (saleId) => {
+        const isConfirmed = await confirm(
+            'Are you sure you want to delete this listing? Buyers will no longer be able to access it.',
+            'Delete Listing?'
+        );
+        if (!isConfirmed) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`/api/sales/${saleId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            showToast('Listing deleted successfully');
+            fetchSales();
+        } catch (err) {
+            showToast(err.response?.data?.message || 'Failed to delete listing', 'error');
+        }
+    };
+
     const closeShareModal = () => {
         setShowShareModal(false);
         setShareFile(null);
@@ -286,6 +305,7 @@ const useDashboard = () => {
         generatedSaleLink,
         handleCreateListing,
         closeSaleModal,
+        handleDeleteSale,
 
         showToast
     };

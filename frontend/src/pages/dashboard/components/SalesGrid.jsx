@@ -1,8 +1,8 @@
 import React from 'react';
-import { ShoppingBag, Bitcoin, Copy, ExternalLink } from 'lucide-react';
+import { ShoppingBag, Bitcoin, Copy, ExternalLink, Trash2 } from 'lucide-react';
 import Card from '../../../components/ui/Card';
 
-const SalesGrid = ({ sales, showToast }) => {
+const SalesGrid = ({ sales, showToast, handleDelete }) => {
   const formatDate = (date) => {
     return new Date(date).toLocaleString('en-US', {
       month: 'short',
@@ -57,6 +57,13 @@ const SalesGrid = ({ sales, showToast }) => {
                                 <p className="text-2xl font-black text-payfile-maroon">{sale.price} <span className="text-payfile-gold text-xs">{sale.currency}</span></p>
                             </div>
                             <div className="flex gap-2">
+                                <button 
+                                    onClick={() => handleDelete(sale._id)}
+                                    className="p-3 rounded-xl bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition-all"
+                                    title="Delete Listing"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
                                 <button 
                                     onClick={() => copyListingLink(sale._id)}
                                     className="p-3 rounded-xl bg-payfile-cream text-payfile-maroon hover:bg-payfile-maroon hover:text-white transition-all"

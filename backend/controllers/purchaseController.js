@@ -9,9 +9,12 @@ const AppError = require('../utils/AppError');
 // Bitcart uses its own currency codes that differ from our internal names.
 // BTC → 'BTC' | USDT TRC20 → 'USDTTRX' | USDT ERC20 → 'USDTETH'
 // BTC → 'BTC' | USDT TRC20 → 'USDT' (Bitcart recognizes the network via wallet_id)
-const getBitcartCurrencyCode = (currency) => {
+const getBitcartCurrencyCode = (currency, network) => {
   if (currency === 'BTC') return 'BTC';
-  if (currency === 'USDT') return 'USDT';
+  if (currency === 'USDT') {
+    if (network === 'TRC20' || network === 'tron') return 'USDTTRX';
+    return 'USDTTRX'; // Default to TRC20 as it's the primary one used
+  }
   return currency;
 };
 

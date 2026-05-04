@@ -52,6 +52,7 @@ const Dashboard = () => {
         <SalesGrid 
             sales={d.sales} 
             showToast={d.showToast} 
+            handleDelete={d.handleDeleteSale}
         />
       </div>
 
