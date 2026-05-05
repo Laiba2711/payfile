@@ -14,13 +14,13 @@ const AppError = require('../utils/AppError');
 // Using the wrong code means Bitcart won't generate a deposit address for that crypto.
 // ─── Bitcart currency code mapping ──────────────────────────────────────────
 // Maps our internal currency names to Bitcart's actual wallet currency codes.
-// BTC → 'BTC' | USDT TRC20 → 'USDT' (Bitcart handles the network via wallet_id)
+// BTC → 'BTC' | USDT TRC20 → 'USDTTRX'
 const getBitcartCurrencyCode = (currency, network) => {
   if (currency === 'BTC') return 'BTC';
   if (currency === 'USDT') {
-    // For TRC20 USDT, Bitcart expects the token symbol 'USDT'.
-    // The wallet_id (set to the Tron wallet) handles the network selection.
-    return 'USDT';
+    // For TRC20 USDT, Bitcart specifically requires 'USDTTRX'.
+    // Using 'USDT' or 'trx' may fail to generate an address or process payouts.
+    return 'USDTTRX';
   }
   return currency;
 };
