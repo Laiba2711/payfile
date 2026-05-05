@@ -59,7 +59,14 @@ const useCheckout = (tokenId) => {
     const handleDownload = () => {
         const fileId = data?.purchase?.file?._id ?? data?.purchase?.sale?.file?._id;
         if (!fileId) return;
-        window.open(`/api/files/public/download/${fileId}?token=${tokenId}`, '_blank');
+        // Use a hidden anchor click instead of window.open to avoid a blank tab.
+        // window.open('_blank') downloads the file but leaves an empty tab open.
+        const link = document.createElement('a');
+        link.href = `/api/files/public/download/${fileId}?token=${tokenId}`;
+        link.setAttribute('download', '');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     const getPaymentInfo = () => {

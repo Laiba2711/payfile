@@ -128,8 +128,8 @@ exports.publicDownloadFile = async (req, res) => {
       return res.status(404).json({ status: 'fail', message: 'File not found on server' });
     }
 
-    // Set headers to force download and prevent "black screen" previews
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.name)}"`);
+    // res.download() sets Content-Disposition: attachment automatically.
+    // Do NOT set it manually beforehand — that causes double-encoding of the filename.
     res.download(resolvedPath, file.name);
   } catch (err) {
     console.error('[Download] Public download error:', err);
