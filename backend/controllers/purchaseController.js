@@ -135,7 +135,10 @@ exports.createPurchase = catchAsync(async (req, res, next) => {
   }
 
   const data = await response.json().catch(() => ({}));
+  console.log(`📡 [Purchase][${saleId}] Bitcart Response Data:`, JSON.stringify(data, null, 2));
+
   if (!response.ok) {
+    console.error(`❌ [Purchase][${saleId}] Bitcart Error:`, data.detail || 'Unknown error');
     return next(new AppError(data.detail || 'Failed to create payment invoice', 400));
   }
 

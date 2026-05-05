@@ -50,14 +50,22 @@ const useCheckout = (tokenId) => {
     const getPaymentInfo = () => {
         const inv = data?.invoice;
         const breakdown = data?.breakdown;
+        const purchase = data?.purchase;
         if (!inv && !breakdown) return null;
 
-        const amount = breakdown?.totalAmount ?? inv?.payments?.[0]?.amount ?? null;
-        const currency = breakdown?.currency ?? inv?.payments?.[0]?.currency_code ?? 'BTC';
-        const address = inv?.payments?.[0]?.payment_address ?? breakdown?.sellerAddress ?? '';
-        const paymentUrl = inv?.payments?.[0]?.payment_url ?? null;
-        const confirmations = inv?.payments?.[0]?.confirmations ?? 0;
-        const required = inv?.payments?.[0]?.min_confirmations ?? 1;
+        // Senior Dev Fix: Don't just pick [0]. Find the one that matches our purchase currency.
+        const targetCode = purchase?.sale?.currency === 'USDT' ? 'USDT' : 'BTC';
+        let activePayment = inv?.payments?.find(p => p.currency_code === targetCode || p.currency_code === 'USDTTRX' || p.currency_code === 'trx');
+        
+        // Fallback to first if no match found
+        if (!activePayment) activePayment = inv?.payments?.[0];
+
+        const amount = breakdown?.totalAmount ?? activePayment?.amount ?? null;
+        const currency = breakdown?.currency ?? activePayment?.currency_code ?? 'BTC';
+        const address = activePayment?.payment_address ?? breakdown?.sellerAddress ?? '';
+        const paymentUrl = activePayment?.payment_url ?? null;
+        const confirmations = activePayment?.confirmations ?? 0;
+        const required = activePayment?.min_confirmations ?? 1;
 
         return {
             address,
