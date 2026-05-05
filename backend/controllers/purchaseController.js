@@ -12,8 +12,7 @@ const AppError = require('../utils/AppError');
 const getBitcartCurrencyCode = (currency, network) => {
   if (currency === 'BTC') return 'BTC';
   if (currency === 'USDT') {
-    if (network === 'TRC20' || network === 'tron') return 'USDTTRX';
-    return 'USDTTRX'; // Default to TRC20 as it's the primary one used
+    return 'USDT'; // Simplified code for the registered token
   }
   return currency;
 };
