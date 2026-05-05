@@ -7,14 +7,19 @@ const useCheckout = (tokenId) => {
     const [error, setError] = useState('');
     const [data, setData] = useState(null);
     const pollingRef = useRef(null);
+    // Track the latest status in a ref so the interval can read it
+    // without needing to be re-created every time data changes.
+    const statusRef = useRef(null);
 
     const fetchData = useCallback(async (silent = false) => {
         if (!silent) setRefreshing(true);
         try {
             const res = await axios.get(`/api/purchases/checkout/${tokenId}`);
             if (res.data.status === 'success') {
+                const status = res.data.data.purchase?.status;
+                statusRef.current = status;
                 setData(res.data.data);
-                return res.data.data.purchase?.status;
+                return status;
             }
         } catch (err) {
             if (!silent) setError('Could not load payment details.');
@@ -25,21 +30,31 @@ const useCheckout = (tokenId) => {
         return null;
     }, [tokenId]);
 
+    // Initial fetch — runs once on mount (or when tokenId changes).
     useEffect(() => {
         fetchData(false);
     }, [fetchData]);
 
+    // Polling — depends only on tokenId/fetchData, NOT on data.
+    // Using statusRef.current inside the interval means we always
+    // read the latest status without re-creating the interval on every data update.
+    // This prevents the polling storm (80+ simultaneous requests) that occurred
+    // when setData() triggered the old effect to restart the interval every 10s.
     useEffect(() => {
-        if (!data || data.purchase?.status === 'completed') {
-            clearInterval(pollingRef.current);
-            return;
-        }
+        // Clear any existing interval first (e.g. on tokenId change)
+        clearInterval(pollingRef.current);
+
         pollingRef.current = setInterval(async () => {
-            const status = await fetchData(true);
-            if (status === 'completed') clearInterval(pollingRef.current);
+            // Stop polling if already completed or expired
+            if (statusRef.current === 'completed') {
+                clearInterval(pollingRef.current);
+                return;
+            }
+            await fetchData(true);
         }, 10000);
+
         return () => clearInterval(pollingRef.current);
-    }, [data, fetchData]);
+    }, [tokenId, fetchData]);
 
     const handleDownload = () => {
         const fileId = data?.purchase?.file?._id ?? data?.purchase?.sale?.file?._id;
@@ -58,26 +73,33 @@ const useCheckout = (tokenId) => {
         const targetCode = purchase?.sale?.currency === 'USDT' ? 'USDT' : 'BTC';
         const BITCART_BTC_CODES = ['BTC', 'BCL', 'btc'];
         const BITCART_USDT_CODES = ['USDT', 'USDTTRX', 'trx', 'USDTETH'];
-        let activePayment = inv?.payments?.find(p =>
+
+        // matchedPayment = the Bitcart payment entry that matches the sale currency (may be undefined)
+        const matchedPayment = inv?.payments?.find(p =>
             targetCode === 'BTC'
                 ? BITCART_BTC_CODES.includes(p.currency_code)
                 : BITCART_USDT_CODES.includes(p.currency_code)
         );
 
-        // Fallback to first payment if no match found
-        if (!activePayment) activePayment = inv?.payments?.[0];
+        // anyPayment = fallback for amount/confirmations only — NOT for address
+        const anyPayment = matchedPayment ?? inv?.payments?.[0];
 
-        const amount = breakdown?.totalAmount ?? activePayment?.amount ?? null;
+        const amount = breakdown?.totalAmount ?? anyPayment?.amount ?? null;
 
-        // IMPORTANT: Always prefer breakdown.currency (set by our backend from sale.currency)
-        // because it gives clean 'BTC' or 'USDT' — never a raw Bitcart internal code like 'BCL'.
-        const rawCurrency = breakdown?.currency ?? activePayment?.currency_code ?? 'BTC';
+        // IMPORTANT: Always use breakdown.currency (our DB value: 'BTC' or 'USDT')
+        // never the raw Bitcart code like 'BCL' or 'USDTTRX'.
+        const rawCurrency = breakdown?.currency ?? anyPayment?.currency_code ?? 'BTC';
         const CURRENCY_DISPLAY_MAP = { BCL: 'BTC', USDTTRX: 'USDT', USDTETH: 'USDT', trx: 'USDT' };
         const currency = CURRENCY_DISPLAY_MAP[rawCurrency] ?? rawCurrency;
-        const address = activePayment?.payment_address ?? breakdown?.sellerAddress ?? '';
-        const paymentUrl = activePayment?.payment_url ?? null;
-        const confirmations = activePayment?.confirmations ?? 0;
-        const required = activePayment?.min_confirmations ?? 1;
+
+        // ADDRESS: only use the matched payment's address — never a mismatched currency's address.
+        // e.g. if sale is USDT but only a BTC payment exists in Bitcart, using its bc1 address
+        // would be WRONG. Fall back to the seller's own address stored in our DB instead.
+        const address = matchedPayment?.payment_address ?? breakdown?.sellerAddress ?? '';
+
+        const paymentUrl = matchedPayment?.payment_url ?? null;
+        const confirmations = anyPayment?.confirmations ?? 0;
+        const required = anyPayment?.min_confirmations ?? 1;
 
         return {
             address,

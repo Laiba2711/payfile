@@ -32,7 +32,8 @@ const usePurchase = (saleId) => {
         if (!token) {
             // Redirect to login, carrying the current listing URL so we bounce
             // the buyer straight back here after they authenticate.
-            navigate(`/login?redirect=/listing/${saleId}`);
+            // Encode the path so URLSearchParams doesn't misparse slashes or special chars.
+            navigate(`/login?redirect=${encodeURIComponent(`/listing/${saleId}`)}`);
             return;
         }
 
@@ -54,7 +55,7 @@ const usePurchase = (saleId) => {
                 // Token expired or invalid — clear stale auth and redirect to login
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
-                navigate(`/login?redirect=/listing/${saleId}`);
+                navigate(`/login?redirect=${encodeURIComponent(`/listing/${saleId}`)}`);
             } else {
                 setError(
                     err.response?.data?.message ||
