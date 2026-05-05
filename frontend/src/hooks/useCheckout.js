@@ -76,17 +76,20 @@ const useCheckout = (tokenId) => {
         if (!inv && !breakdown) return null;
 
         // Find the correct payment method from Bitcart's payments array.
-        // Bitcart uses internal codes: BTC → 'BCL', USDT/TRC20 → 'USDTTRX' or 'USDT'
+        // Bitcart uses internal codes: BTC → 'BCL', USDT/TRC20 → 'USDTTRX', 'trx', or 'USDT'
         const targetCode = purchase?.sale?.currency === 'USDT' ? 'USDT' : 'BTC';
-        const BITCART_BTC_CODES = ['BTC', 'BCL', 'btc'];
-        const BITCART_USDT_CODES = ['USDT', 'USDTTRX', 'trx', 'USDTETH'];
+        const BITCART_BTC_CODES = ['BTC', 'BCL', 'btc', 'bcl'];
+        const BITCART_USDT_CODES = ['USDT', 'USDTTRX', 'trx', 'USDTETH', 'TRX', 'usdt', 'usdttrx'];
 
         // matchedPayment = the Bitcart payment entry that matches the sale currency (may be undefined)
-        const matchedPayment = inv?.payments?.find(p =>
-            targetCode === 'BTC'
-                ? BITCART_BTC_CODES.includes(p.currency_code)
-                : BITCART_USDT_CODES.includes(p.currency_code)
-        );
+        const matchedPayment = inv?.payments?.find(p => {
+            const code = p.currency_code?.toUpperCase();
+            if (targetCode === 'BTC') {
+                return BITCART_BTC_CODES.map(c => c.toUpperCase()).includes(code);
+            } else {
+                return BITCART_USDT_CODES.map(c => c.toUpperCase()).includes(code);
+            }
+        });
 
         // anyPayment = fallback for amount/confirmations only — NOT for address
         const anyPayment = matchedPayment ?? inv?.payments?.[0];
@@ -96,7 +99,15 @@ const useCheckout = (tokenId) => {
         // IMPORTANT: Always use breakdown.currency (our DB value: 'BTC' or 'USDT')
         // never the raw Bitcart code like 'BCL' or 'USDTTRX'.
         const rawCurrency = breakdown?.currency ?? anyPayment?.currency_code ?? 'BTC';
-        const CURRENCY_DISPLAY_MAP = { BCL: 'BTC', USDTTRX: 'USDT', USDTETH: 'USDT', trx: 'USDT' };
+        const CURRENCY_DISPLAY_MAP = { 
+            BCL: 'BTC', 
+            bcl: 'BTC',
+            USDTTRX: 'USDT', 
+            usdttrx: 'USDT',
+            USDTETH: 'USDT', 
+            trx: 'USDT',
+            TRX: 'USDT'
+        };
         const currency = CURRENCY_DISPLAY_MAP[rawCurrency] ?? rawCurrency;
 
         // ADDRESS: only use the matched payment's address — never a mismatched currency's address.

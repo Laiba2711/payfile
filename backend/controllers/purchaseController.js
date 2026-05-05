@@ -12,11 +12,15 @@ const AppError = require('../utils/AppError');
 //   BTC wallet  → currency: 'btc'  → use 'BTC' (Bitcart accepts both cases)
 //   TRC20 wallet → currency: 'trx' → MUST use 'trx', NOT 'USDT' or 'USDTTRX'
 // Using the wrong code means Bitcart won't generate a deposit address for that crypto.
+// ─── Bitcart currency code mapping ──────────────────────────────────────────
+// Maps our internal currency names to Bitcart's actual wallet currency codes.
+// BTC → 'BTC' | USDT TRC20 → 'USDT' (Bitcart handles the network via wallet_id)
 const getBitcartCurrencyCode = (currency, network) => {
   if (currency === 'BTC') return 'BTC';
   if (currency === 'USDT') {
-    // TRC20 USDT wallet in Bitcart has currency code 'trx' — must match exactly.
-    return 'trx';
+    // For TRC20 USDT, Bitcart expects the token symbol 'USDT'.
+    // The wallet_id (set to the Tron wallet) handles the network selection.
+    return 'USDT';
   }
   return currency;
 };
@@ -467,6 +471,12 @@ exports.handleBitCartWebhook = async (req, res) => {
     const signature = req.headers['x-bitcart-signature-256'];
     const secret = process.env.BITCART_WEBHOOK_SECRET;
 
+    // Bitcart runs on the same server (VPS) as this backend.
+    // Local requests come from ::1 or 127.0.0.1 and are never signed
+    // because Bitcart only sends signatures for publicly reachable URLs.
+    // Trusting localhost is safe — nothing outside the machine can spoof ::1.
+    const isLocalRequest = req.ip === '::1' || req.ip === '127.0.0.1' || req.ip === '::ffff:127.0.0.1';
+
     if (secret && signature) {
       const hmac = crypto.createHmac('sha256', secret);
       const digest = Buffer.from(hmac.update(rawBody).digest('hex'), 'utf8');
@@ -475,6 +485,10 @@ exports.handleBitCartWebhook = async (req, res) => {
         console.warn(`🛑 [Webhook] INVALID SIGNATURE from ${req.ip}. Rejecting.`);
         return res.status(401).json({ status: 'fail', message: 'Invalid signature' });
       }
+      console.log(`✅ [Webhook] Signature verified from ${req.ip}`);
+    } else if (isLocalRequest) {
+      // No signature but from localhost — Bitcart on same VPS, trust it
+      console.log(`✅ [Webhook] Trusted localhost request from ${req.ip} (no signature required)`);
     } else if (secret) {
       console.warn(`🛑 [Webhook] MISSING SIGNATURE from ${req.ip}. Rejecting for security.`);
       return res.status(401).json({ status: 'fail', message: 'Missing signature' });
