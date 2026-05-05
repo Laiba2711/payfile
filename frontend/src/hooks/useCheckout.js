@@ -53,15 +53,27 @@ const useCheckout = (tokenId) => {
         const purchase = data?.purchase;
         if (!inv && !breakdown) return null;
 
-        // Senior Dev Fix: Don't just pick [0]. Find the one that matches our purchase currency.
+        // Find the correct payment method from Bitcart's payments array.
+        // Bitcart uses internal codes: BTC → 'BCL', USDT/TRC20 → 'USDTTRX' or 'USDT'
         const targetCode = purchase?.sale?.currency === 'USDT' ? 'USDT' : 'BTC';
-        let activePayment = inv?.payments?.find(p => p.currency_code === targetCode || p.currency_code === 'USDTTRX' || p.currency_code === 'trx');
-        
-        // Fallback to first if no match found
+        const BITCART_BTC_CODES = ['BTC', 'BCL', 'btc'];
+        const BITCART_USDT_CODES = ['USDT', 'USDTTRX', 'trx', 'USDTETH'];
+        let activePayment = inv?.payments?.find(p =>
+            targetCode === 'BTC'
+                ? BITCART_BTC_CODES.includes(p.currency_code)
+                : BITCART_USDT_CODES.includes(p.currency_code)
+        );
+
+        // Fallback to first payment if no match found
         if (!activePayment) activePayment = inv?.payments?.[0];
 
         const amount = breakdown?.totalAmount ?? activePayment?.amount ?? null;
-        const currency = breakdown?.currency ?? activePayment?.currency_code ?? 'BTC';
+
+        // IMPORTANT: Always prefer breakdown.currency (set by our backend from sale.currency)
+        // because it gives clean 'BTC' or 'USDT' — never a raw Bitcart internal code like 'BCL'.
+        const rawCurrency = breakdown?.currency ?? activePayment?.currency_code ?? 'BTC';
+        const CURRENCY_DISPLAY_MAP = { BCL: 'BTC', USDTTRX: 'USDT', USDTETH: 'USDT', trx: 'USDT' };
+        const currency = CURRENCY_DISPLAY_MAP[rawCurrency] ?? rawCurrency;
         const address = activePayment?.payment_address ?? breakdown?.sellerAddress ?? '';
         const paymentUrl = activePayment?.payment_url ?? null;
         const confirmations = activePayment?.confirmations ?? 0;
