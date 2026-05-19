@@ -75,22 +75,26 @@ const useCheckout = (tokenId) => {
         if (!inv && !breakdown) return null;
 
         // BTC-only: match the BTC payment method from Bitcart's payments array.
-        // Bitcart may return 'BTC' or 'BCL' as the currency code for Bitcoin.
+        // Bitcart returns payment.currency = "btc" (NOT currency_code).
+        // We check all possible fields for maximum compatibility.
         const BITCART_BTC_CODES = ['BTC', 'BCL', 'btc', 'bcl'];
 
-        const matchedPayment = inv?.payments?.find(p =>
-            BITCART_BTC_CODES.map(c => c.toUpperCase()).includes(p.currency_code?.toUpperCase())
-        );
+        const matchBtc = (p) => {
+            const code = (p.currency_code ?? p.currency ?? p.symbol ?? '').toUpperCase();
+            return BITCART_BTC_CODES.map(c => c.toUpperCase()).includes(code);
+        };
 
+        const matchedPayment = inv?.payments?.find(matchBtc);
         const anyPayment = matchedPayment ?? inv?.payments?.[0];
 
         const amount = breakdown?.totalAmount ?? anyPayment?.amount ?? null;
 
         // Always display as 'BTC' regardless of Bitcart's internal code (BCL, etc.)
         const CURRENCY_DISPLAY_MAP = { BCL: 'BTC', bcl: 'BTC' };
-        const rawCurrency = breakdown?.currency ?? anyPayment?.currency_code ?? 'BTC';
-        const currency = CURRENCY_DISPLAY_MAP[rawCurrency] ?? rawCurrency;
+        const rawCurrency = breakdown?.currency ?? anyPayment?.currency ?? anyPayment?.currency_code ?? 'BTC';
+        const currency = CURRENCY_DISPLAY_MAP[rawCurrency] ?? rawCurrency.toUpperCase();
 
+        // Use Bitcart's generated deposit address — NOT the seller's address.
         const address = matchedPayment?.payment_address ?? breakdown?.sellerAddress ?? '';
         const paymentUrl = matchedPayment?.payment_url ?? null;
         const confirmations = anyPayment?.confirmations ?? 0;
