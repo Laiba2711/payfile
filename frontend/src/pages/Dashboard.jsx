@@ -78,10 +78,6 @@ const Dashboard = () => {
         saleFile={d.saleFile}
         salePrice={d.salePrice}
         setSalePrice={d.setSalePrice}
-        currency={d.currency}
-        setCurrency={d.setCurrency}
-        network={d.network}
-        setNetwork={d.setNetwork}
         btcAddress={d.btcAddress}
         setBtcAddress={d.setBtcAddress}
         handleCreateListing={d.handleCreateListing}

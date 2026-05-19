@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Save, Wallet, ShieldCheck, Info, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Save, Wallet, ShieldCheck, AlertTriangle, Loader2, CheckCircle2 } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 
@@ -8,12 +8,8 @@ import Button from '../../components/ui/Button';
 const AdminSettings = () => {
   const [settings, setSettings] = useState({
     adminBtcAddress: '',
-    adminUsdtAddress: '',
-    adminUsdtTrc20Address: '',
-    adminUsdtErc20Address: '',
     commissionRate: 0.05,
     btcWalletId: '',
-    usdtTrc20WalletId: '',
   });
   const [syncStatus, setSyncStatus] = useState([]);
 
@@ -30,7 +26,12 @@ const AdminSettings = () => {
           }
         });
         if (response.data.status === 'success') {
-          setSettings(response.data.data.settings);
+          const s = response.data.data.settings;
+          setSettings({
+            adminBtcAddress: s.adminBtcAddress || '',
+            commissionRate: s.commissionRate || 0.05,
+            btcWalletId: s.btcWalletId || '',
+          });
         }
       } catch (err) {
         console.error(err);
@@ -79,7 +80,7 @@ const AdminSettings = () => {
     <div className="max-w-4xl space-y-10 animate-fade-up">
       <div>
         <h1 className="text-4xl font-black text-payfile-maroon tracking-tight">Admin Settings</h1>
-        <p className="text-gray-500 mt-2 font-medium">Configure payout addresses and commission rates.</p>
+        <p className="text-gray-500 mt-2 font-medium">Configure BTC payout address and commission rate.</p>
       </div>
 
       <Card className="p-10 border-payfile-maroon/5 shadow-2xl relative overflow-hidden">
@@ -93,13 +94,14 @@ const AdminSettings = () => {
           <div className="space-y-1">
             <p className="text-base font-black text-white tracking-tight">Security Notice</p>
             <p className="text-[12px] text-white/60 font-medium leading-relaxed">
-                Ensure all payout addresses are correct. Commission funds will be sent directly to these addresses. 
+                Ensure your BTC payout address is correct. Commission funds will be sent directly to this address. 
                 Incorrect addresses may lead to permanent loss of funds.
             </p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-10 relative z-10">
+          {/* BTC Address + Wallet ID */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
             <div className="space-y-4">
               <div className="flex items-center gap-3 ml-1">
@@ -111,7 +113,7 @@ const AdminSettings = () => {
                 value={settings.adminBtcAddress}
                 onChange={(e) => setSettings({ ...settings, adminBtcAddress: e.target.value })}
                 className="w-full bg-payfile-cream/30 border border-payfile-maroon/10 rounded-2xl py-4 px-6 text-payfile-maroon font-black font-mono text-sm focus:outline-none focus:border-payfile-gold/50 transition-all shadow-inner"
-                placeholder="Enter BTC address"
+                placeholder="bc1q..."
                 required
               />
             </div>
@@ -119,51 +121,19 @@ const AdminSettings = () => {
             <div className="space-y-4">
               <div className="flex items-center gap-3 ml-1">
                 <Wallet className="w-4 h-4 text-payfile-amber" />
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Admin USDT TRC20 Address</label>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">BTC Wallet ID (Bitcart)</label>
               </div>
               <input
                 type="text"
-                value={settings.adminUsdtTrc20Address}
-                onChange={(e) => setSettings({ ...settings, adminUsdtTrc20Address: e.target.value })}
+                value={settings.btcWalletId}
+                onChange={(e) => setSettings({ ...settings, btcWalletId: e.target.value })}
                 className="w-full bg-payfile-cream/30 border border-payfile-maroon/10 rounded-2xl py-4 px-6 text-payfile-maroon font-black font-mono text-sm focus:outline-none focus:border-payfile-gold/50 transition-all shadow-inner"
-                placeholder="Enter TRC20 address (T...)"
-                required
+                placeholder="Bitcart BTC Wallet ID"
               />
             </div>
-
-
           </div>
 
-          <div className="pt-10 border-t border-payfile-maroon/5 space-y-10">
-            <div>
-              <h3 className="text-sm font-black text-payfile-maroon uppercase tracking-widest mb-6">Bitcart Wallet Configuration</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">BTC Wallet ID</label>
-                  <input
-                    type="text"
-                    value={settings.btcWalletId}
-                    onChange={(e) => setSettings({ ...settings, btcWalletId: e.target.value })}
-                    className="w-full bg-payfile-cream/10 border border-payfile-maroon/5 rounded-2xl py-4 px-6 text-payfile-maroon font-black font-mono text-xs focus:outline-none focus:border-payfile-gold/30 transition-all"
-                    placeholder="Bitcart BTC Wallet ID"
-                  />
-                </div>
-                <div className="space-y-4">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">USDT TRC20 Wallet ID</label>
-                  <input
-                    type="text"
-                    value={settings.usdtTrc20WalletId}
-                    onChange={(e) => setSettings({ ...settings, usdtTrc20WalletId: e.target.value })}
-                    className="w-full bg-payfile-cream/10 border border-payfile-maroon/5 rounded-2xl py-4 px-6 text-payfile-maroon font-black font-mono text-xs focus:outline-none focus:border-payfile-gold/30 transition-all"
-                    placeholder="Bitcart TRC20 Wallet ID"
-                  />
-                </div>
-
-              </div>
-            </div>
-          </div>
-
-
+          {/* Commission Rate */}
           <div className="pt-10 border-t border-payfile-maroon/5">
             <div className="flex items-center justify-between gap-8 flex-col md:flex-row">
                 <div className="space-y-4 flex-1">
@@ -192,7 +162,7 @@ const AdminSettings = () => {
                     </div>
                     <p className="text-[12px] font-medium text-gray-500 leading-relaxed">
                         The current commission rate is <strong className="text-payfile-maroon">{(settings.commissionRate * 100).toFixed(1)}%</strong>. 
-                        This commission is taken from every successful sale on the platform.
+                        This commission is taken from every successful BTC sale on the platform.
                     </p>
                 </div>
             </div>

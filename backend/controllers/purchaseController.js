@@ -1,29 +1,12 @@
 const crypto = require('crypto');
 const fetch = require('node-fetch');
 const prisma = require('../prisma/client');
-const { networkFromDb } = require('../utils/enumMap');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 
-// ─── Bitcart currency code mapping ──────────────────────────────────────────
-// Maps our internal currency names to Bitcart's actual wallet currency codes.
-// IMPORTANT: The code must match the wallet's 'currency' field in Bitcart exactly.
-// Confirmed from startup logs:
-//   BTC wallet  → currency: 'btc'  → use 'BTC' (Bitcart accepts both cases)
-//   TRC20 wallet → currency: 'trx' → MUST use 'trx', NOT 'USDT' or 'USDTTRX'
-// Using the wrong code means Bitcart won't generate a deposit address for that crypto.
-// ─── Bitcart currency code mapping ──────────────────────────────────────────
-// Maps our internal currency names to Bitcart's actual wallet currency codes.
-// BTC → 'BTC' | USDT TRC20 → 'USDTTRX'
-const getBitcartCurrencyCode = (currency, network) => {
-  if (currency === 'BTC') return 'BTC';
-  if (currency === 'USDT') {
-    // For TRC20 USDT, Bitcart specifically requires 'USDTTRX'.
-    // Using 'USDT' or 'trx' may fail to generate an address or process payouts.
-    return 'USDTTRX';
-  }
-  return currency;
-};
+// ─── BTC-Only Platform ────────────────────────────────────────────────────────
+// This platform only accepts Bitcoin (BTC). USDT/TRX support has been removed.
+// All invoices, payouts, and wallet references use BTC exclusively.
 
 // ─── Settings Cache ─────────────────────────────────────────────────────────
 let settingsCache = null;
@@ -41,17 +24,11 @@ const loadSettings = async (forceRefresh = false) => {
   const db = (await prisma.settings.findUnique({ where: { id: 1 } })) || {};
   settingsCache = {
     adminBtcAddress: process.env.ADMIN_BTC_ADDRESS || db.adminBtcAddress || '',
-    adminUsdtAddress: process.env.ADMIN_USDT_ADDRESS || db.adminUsdtAddress || '',
-    adminUsdtTrc20Address: process.env.ADMIN_USDT_TRC20_ADDRESS || db.adminUsdtTrc20Address || '',
     commissionRate: db.commissionRate || 0.05,
     btcWalletId: process.env.BITCART_WALLET_ID || db.btcWalletId || '',
-    usdtTrc20WalletId: process.env.BITCART_USDT_TRC20_WALLET_ID || db.usdtTrc20WalletId || '',
   };
-  
-  console.log('[Settings] Current Wallet IDs:', {
-    btc: settingsCache.btcWalletId ? 'SET' : 'MISSING',
-    usdt: settingsCache.usdtTrc20WalletId ? 'SET' : 'MISSING'
-  });
+
+  console.log('[Settings] BTC Wallet ID:', settingsCache.btcWalletId ? 'SET' : 'MISSING');
 
   settingsCacheTime = now;
   return settingsCache;
@@ -105,13 +82,11 @@ exports.createPurchase = catchAsync(async (req, res, next) => {
   }
 
   const commissionRate = parseFloat(settings.commissionRate) || 0.05;
-  const dp = sale.currency === 'BTC' ? 8 : 6;
   const sellerAmount = parseFloat(sale.price);
-  const commissionAmount = parseFloat((sellerAmount * commissionRate).toFixed(dp));
-  const totalAmount = parseFloat((sellerAmount + commissionAmount).toFixed(dp));
+  const commissionAmount = parseFloat((sellerAmount * commissionRate).toFixed(8));
+  const totalAmount = parseFloat((sellerAmount + commissionAmount).toFixed(8));
 
-  const walletId = sale.currency === 'USDT' ? settings.usdtTrc20WalletId : settings.btcWalletId;
-  const bitcartCurrency = getBitcartCurrencyCode(sale.currency, networkFromDb(sale.network));
+  const walletId = settings.btcWalletId;
   const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
 
   const invoiceBody = {
@@ -119,14 +94,14 @@ exports.createPurchase = catchAsync(async (req, res, next) => {
     store_id: BITCART_STORE_ID,
     order_id: saleId,
     notification_url: `${backendUrl}/api/purchases/bitcart-webhook`,
-    currency: sale.currency === 'BTC' ? 'BTC' : 'USD', // Pricing currency
-    cryptos: [bitcartCurrency], // Force the specific crypto payment method
+    currency: 'BTC',
+    cryptos: ['BTC'],
   };
   if (walletId) invoiceBody.wallet_id = walletId;
 
   console.log(`🚀 [Purchase][${saleId}] Creating Bitcart Invoice:`, {
     price: totalAmount,
-    currency: bitcartCurrency,
+    currency: 'BTC',
     wallet: walletId ? 'PROVIDED' : 'MISSING'
   });
 
@@ -204,8 +179,7 @@ exports.confirmPurchase = catchAsync(async (req, res, next) => {
 });
 
 // ── Shared payout helper ────────────────────────────────────────────────────
-// currency must be a Bitcart-specific code: 'BTC', 'USDTTRX', or 'USDTETH'.
-// DO NOT pass 'USDT' directly — Bitcart will reject it.
+// bitcartCurrency must be 'BTC' — this platform is BTC-only.
 const createBitcartPayout = async ({ amount, bitcartCurrency, destination, walletId }) => {
   const BITCART_HOST = process.env.BITCART_HOST;
   const BITCART_API_KEY = process.env.BITCART_API_KEY;
@@ -241,6 +215,31 @@ const createBitcartPayout = async ({ amount, bitcartCurrency, destination, walle
       console.error(`[Payout] Bitcart rejected payout: ${errMsg}`);
       return { ok: false, error: errMsg };
     }
+
+    console.log(`[Payout] Created payout ${data.id} (status: ${data.status})`);
+
+    // ── Auto-approve the payout ────────────────────────────────────────────────
+    // Bitcart creates payouts in 'pending' state. Without approval they won't
+    // be broadcast to the Bitcoin network. We approve immediately via the
+    // batch endpoint so funds go out automatically.
+    if (data.id) {
+      try {
+        const approveRes = await fetch(`${BITCART_HOST}/payouts/batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${BITCART_API_KEY}` },
+          body: JSON.stringify({ command: 'approve', ids: [data.id] }),
+        });
+        const approveData = await approveRes.json().catch(() => ({}));
+        if (approveRes.ok) {
+          console.log(`✅ [Payout] Auto-approved payout ${data.id}`);
+        } else {
+          console.warn(`⚠️  [Payout] Auto-approve failed for ${data.id}: ${approveData.detail || JSON.stringify(approveData)}`);
+        }
+      } catch (approveErr) {
+        console.warn(`⚠️  [Payout] Auto-approve network error: ${approveErr.message}`);
+      }
+    }
+
     return { ok: true, payoutId: data.id, status: data.status };
   } catch (err) {
     console.error(`[Payout] Network error: ${err.message}`);
@@ -267,29 +266,25 @@ const triggerPurchasePayouts = async (purchaseId) => {
     const sale = purchase.sale;
     const settings = await loadSettings();
     const commissionRate = parseFloat(settings.commissionRate) || 0.05;
-    const currency = sale.currency || 'BTC';
-    const network = networkFromDb(sale.network);
-    const dp = currency === 'BTC' ? 8 : 6;
     const sellerAmount = parseFloat(sale.price);
-    const commissionAmount = parseFloat((sellerAmount * commissionRate).toFixed(dp));
+    const commissionAmount = parseFloat((sellerAmount * commissionRate).toFixed(8));
 
-    const walletId = currency === 'USDT' ? settings.usdtTrc20WalletId : settings.btcWalletId;
+    const walletId = settings.btcWalletId;
     if (!walletId) {
-      console.error(`❌ [Payouts] No wallet ID configured for ${currency}${network ? ' ' + network : ''} — cannot create payouts`);
+      console.error(`❌ [Payouts] No BTC wallet ID configured — cannot create payouts`);
       return;
     }
 
-    const bitcartCurrencyCode = getBitcartCurrencyCode(currency, network);
-    console.log(`🚀 [Payouts][${purchase.tokenId}] Split distribution: ${sellerAmount} + ${commissionAmount} ${bitcartCurrencyCode}`);
+    console.log(`🚀 [Payouts][${purchase.tokenId}] Split distribution: ${sellerAmount} + ${commissionAmount} BTC`);
 
     // ── PAYOUT 1: SELLER ──
     let sellerPayoutOk = purchase.sellerPayoutProcessed;
     if (!sellerPayoutOk) {
       if (sale.address) {
-        console.log(`   [Payouts][${purchase.tokenId}] → Seller: ${sellerAmount} ${bitcartCurrencyCode} to ${sale.address}`);
+        console.log(`   [Payouts][${purchase.tokenId}] → Seller: ${sellerAmount} BTC to ${sale.address}`);
         const sellerPayout = await createBitcartPayout({
           amount: sellerAmount,
-          bitcartCurrency: bitcartCurrencyCode,
+          bitcartCurrency: 'BTC',
           destination: sale.address,
           walletId,
         });
@@ -303,7 +298,7 @@ const triggerPurchasePayouts = async (purchaseId) => {
               pendingExpiresAt: null,
             },
           });
-          console.log(`✅ [Payouts][${purchase.tokenId}] SELLER Payout Success | ${sellerAmount} ${currency} → ${sale.address}`);
+          console.log(`✅ [Payouts][${purchase.tokenId}] SELLER Payout Success | ${sellerAmount} BTC → ${sale.address}`);
         } else {
           console.error(`❌ [Payouts][${purchase.tokenId}] SELLER Payout FAILED: ${sellerPayout.error}`);
         }
@@ -320,16 +315,13 @@ const triggerPurchasePayouts = async (purchaseId) => {
     // ── PAYOUT 2: ADMIN ──
     let adminPayoutOk = purchase.adminPayoutProcessed;
     if (!adminPayoutOk) {
-      const adminAddress =
-        currency === 'BTC'
-          ? settings.adminBtcAddress
-          : settings.adminUsdtTrc20Address || settings.adminUsdtAddress;
+      const adminAddress = settings.adminBtcAddress;
 
       if (adminAddress) {
-        console.log(`   [Payouts][${purchase.tokenId}] → Admin: ${commissionAmount} ${bitcartCurrencyCode} to ${adminAddress}`);
+        console.log(`   [Payouts][${purchase.tokenId}] → Admin: ${commissionAmount} BTC to ${adminAddress}`);
         const adminPayout = await createBitcartPayout({
           amount: commissionAmount,
-          bitcartCurrency: bitcartCurrencyCode,
+          bitcartCurrency: 'BTC',
           destination: adminAddress,
           walletId,
         });
@@ -343,13 +335,13 @@ const triggerPurchasePayouts = async (purchaseId) => {
               pendingExpiresAt: null,
             },
           });
-          console.log(`✅ [Payouts][${purchase.tokenId}] ADMIN Payout Success  | ${commissionAmount} ${bitcartCurrencyCode} → ${adminAddress}`);
+          console.log(`✅ [Payouts][${purchase.tokenId}] ADMIN Payout Success  | ${commissionAmount} BTC → ${adminAddress}`);
 
           // Record income stats — store as Number (not string) for aggregation.
           await prisma.income.create({
             data: {
-              amount: parseFloat(commissionAmount.toFixed(dp)),
-              currency,
+              amount: parseFloat(commissionAmount.toFixed(8)),
+              currency: 'BTC',
               purchaseId: purchase.id,
               tokenId: purchase.tokenId,
               adminAddress,
@@ -360,7 +352,7 @@ const triggerPurchasePayouts = async (purchaseId) => {
           console.error(`❌ [Payouts][${purchase.tokenId}] ADMIN Payout FAILED: ${adminPayout.error}`);
         }
       } else {
-        console.error(`❌ [Payouts][${purchase.tokenId}] FAILED: No Admin address configured for ${currency}. Check .env.`);
+        console.error(`❌ [Payouts][${purchase.tokenId}] FAILED: No Admin BTC address configured. Check ADMIN_BTC_ADDRESS in .env.`);
       }
     }
 
@@ -564,16 +556,12 @@ exports.getCheckoutData = async (req, res) => {
       }
     }
 
-    const currency = current.sale?.currency || 'BTC';
-    const dp = currency === 'BTC' ? 8 : 6;
     const commissionRate = parseFloat(settings.commissionRate) || 0.05;
     const sellerAmount = parseFloat(current.sale?.price || 0);
-    const commissionAmount = parseFloat((sellerAmount * commissionRate).toFixed(dp));
-    const totalAmount = parseFloat((sellerAmount + commissionAmount).toFixed(dp));
+    const commissionAmount = parseFloat((sellerAmount * commissionRate).toFixed(8));
+    const totalAmount = parseFloat((sellerAmount + commissionAmount).toFixed(8));
 
-    const adminAddress = currency === 'USDT'
-      ? settings.adminUsdtTrc20Address || settings.adminUsdtAddress
-      : settings.adminBtcAddress;
+    const adminAddress = settings.adminBtcAddress;
 
     res.status(200).json({
       status: 'success',
@@ -586,18 +574,18 @@ exports.getCheckoutData = async (req, res) => {
           sale: current.sale && {
             ...current.sale,
             _id: current.sale.id,
-            network: networkFromDb(current.sale.network),
+            network: '', // BTC-only — no network suffix
             file: current.sale.file && { ...current.sale.file, _id: current.sale.file.id },
           },
           createdAt: current.createdAt,
         },
         invoice: invoiceData,
         breakdown: {
-          sellerAmount: sellerAmount.toFixed(dp),
-          commissionAmount: commissionAmount.toFixed(dp),
-          totalAmount: totalAmount.toFixed(dp),
+          sellerAmount: sellerAmount.toFixed(8),
+          commissionAmount: commissionAmount.toFixed(8),
+          totalAmount: totalAmount.toFixed(8),
           commissionRate: `${(commissionRate * 100).toFixed(0)}%`,
-          currency,
+          currency: 'BTC',
           sellerAddress: current.sale?.address || '',
           adminAddress,
         },

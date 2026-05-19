@@ -53,15 +53,6 @@ const AdminIncomeChart = ({ chartData }) => {
                         fill="url(#colorIncome)" 
                         name="BTC Income"
                     />
-                    <Area 
-                        type="monotone" 
-                        dataKey="usdt" 
-                        stroke="#D4AF37" 
-                        strokeWidth={4}
-                        fillOpacity={0.1} 
-                        fill="#D4AF37" 
-                        name="USDT Income"
-                    />
                 </AreaChart>
             </ResponsiveContainer>
         </div>

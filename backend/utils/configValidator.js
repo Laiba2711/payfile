@@ -16,7 +16,6 @@ const validateConfig = () => {
         'BITCART_API_KEY',
         'BITCART_STORE_ID',
         'BITCART_WALLET_ID',
-        'BITCART_USDT_TRC20_WALLET_ID',
         'BITCART_WEBHOOK_SECRET',
     ];
 

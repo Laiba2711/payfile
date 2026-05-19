@@ -1,7 +1,7 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  Bitcoin, Coins, ShieldCheck, ArrowLeft, RefreshCw, Zap, XCircle 
+  Bitcoin, ShieldCheck, ArrowLeft, RefreshCw, Zap, XCircle 
 } from 'lucide-react';
 import Loader from '../components/ui/Loader';
 
@@ -79,11 +79,7 @@ const CheckoutPage = () => {
           <div className="px-8 py-6 border-b border-payfile-maroon/5 bg-payfile-cream/20 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-2xl bg-payfile-maroon flex items-center justify-center shadow-lg shadow-payfile-maroon/20">
-                {payment?.currency === 'BTC' ? (
-                  <Bitcoin className="w-6 h-6 text-payfile-gold" />
-                ) : (
-                  <Coins className="w-6 h-6 text-payfile-gold" />
-                )}
+                <Bitcoin className="w-6 h-6 text-payfile-gold" />
               </div>
               <div>
                 <h1 className="text-lg font-black tracking-tight">Checkout</h1>

@@ -23,10 +23,7 @@ const AdminStatsGrid = ({ stats }) => {
     { 
         title: 'Total Revenue', 
         value: (
-            <div className="flex flex-col gap-1">
-                <span className="text-xl font-black">{stats?.totalBtcRevenue || 0} <span className="text-[10px] text-payfile-gold">BTC</span></span>
-                <span className="text-xl font-black">{stats?.totalUsdtRevenue || 0} <span className="text-[10px] text-payfile-amber">USDT</span></span>
-            </div>
+            <span className="text-xl font-black">{stats?.totalBtcRevenue || 0} <span className="text-[10px] text-payfile-gold">BTC</span></span>
         ), 
         icon: TrendingUp, 
         color: 'text-payfile-amber', 
@@ -36,10 +33,7 @@ const AdminStatsGrid = ({ stats }) => {
     { 
         title: 'Total Commissions (5%)', 
         value: (
-            <div className="flex flex-col gap-1">
-                <span className="text-xl font-black text-green-700">{stats?.totalBtcCommission || 0} <span className="text-[10px] text-gray-400">BTC</span></span>
-                <span className="text-xl font-black text-green-700">{stats?.totalUsdtCommission || 0} <span className="text-[10px] text-gray-400">USDT</span></span>
-            </div>
+            <span className="text-xl font-black text-green-700">{stats?.totalBtcCommission || 0} <span className="text-[10px] text-gray-400">BTC</span></span>
         ), 
         icon: DollarSign, 
         color: 'text-green-600', 

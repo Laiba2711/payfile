@@ -30,7 +30,6 @@ const useDashboard = () => {
     const [btcAddress, setBtcAddress] = useState('');
     const [listingExpiry, setListingExpiry] = useState('');
     const [currency, setCurrency] = useState('BTC');
-    const [network, setNetwork] = useState('TRC20');
     const [generatedSaleLink, setGeneratedSaleLink] = useState('');
 
     useEffect(() => {
@@ -201,7 +200,7 @@ const useDashboard = () => {
                 fileId: saleFile._id,
                 price: salePrice,
                 currency,
-                network: currency === 'USDT' ? network : '',
+                network: '',
                 address: btcAddress,
                 expiry: listingExpiry
             }, {
@@ -300,8 +299,6 @@ const useDashboard = () => {
         setListingExpiry,
         currency,
         setCurrency,
-        network,
-        setNetwork,
         generatedSaleLink,
         handleCreateListing,
         closeSaleModal,

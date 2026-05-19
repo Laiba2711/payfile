@@ -3,7 +3,7 @@ const { networkToDb, networkFromDb } = require('../utils/enumMap');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 
-const decimals = (currency) => (currency === 'BTC' ? 8 : 6);
+const decimals = () => 8; // BTC only — always 8 decimal places
 
 // Map DB row → client shape (exposes `_id`, flattens network enum).
 const toClientSale = (s) => s && ({ ...s, _id: s.id, network: networkFromDb(s.network) });
@@ -23,7 +23,7 @@ exports.createSale = catchAsync(async (req, res, next) => {
       sellerId: req.user.id,
       price: parseFloat(price),
       currency,
-      network: currency === 'USDT' ? networkToDb(network || 'TRC20') : networkToDb(''),
+      network: networkToDb(''), // BTC only — no network suffix
       address,
       expiresAt,
     },
@@ -66,16 +66,7 @@ exports.getPublicSale = catchAsync(async (req, res, next) => {
   const commissionPrice = commission.toFixed(dp);
 
   const settings = (await prisma.settings.findUnique({ where: { id: 1 } })) || {};
-
-  let adminAddress;
-  if (sale.currency === 'BTC') {
-    adminAddress = process.env.ADMIN_BTC_ADDRESS || settings.adminBtcAddress;
-  } else {
-    adminAddress =
-      process.env.ADMIN_USDT_TRC20_ADDRESS ||
-      settings.adminUsdtTrc20Address ||
-      settings.adminUsdtAddress;
-  }
+  const adminAddress = process.env.ADMIN_BTC_ADDRESS || settings.adminBtcAddress;
 
   res.status(200).json({
     status: 'success',

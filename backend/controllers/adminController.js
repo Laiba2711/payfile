@@ -22,20 +22,12 @@ exports.getStats = catchAsync(async (req, res) => {
   });
 
   let totalBtcRevenue = 0;
-  let totalUsdtRevenue = 0;
   let totalBtcCommission = 0;
-  let totalUsdtCommission = 0;
   for (const p of confirmedPurchases) {
     if (!p.sale) continue;
     const price = parseFloat(p.sale.price);
-    const commission = price * commissionRate;
-    if (p.sale.currency === 'USDT') {
-      totalUsdtRevenue += price;
-      totalUsdtCommission += commission;
-    } else {
-      totalBtcRevenue += price;
-      totalBtcCommission += commission;
-    }
+    totalBtcRevenue += price;
+    totalBtcCommission += price * commissionRate;
   }
 
   res.status(200).json({
@@ -44,9 +36,7 @@ exports.getStats = catchAsync(async (req, res) => {
       totalUsers,
       totalSales: confirmedPurchases.length,
       totalBtcRevenue: totalBtcRevenue.toFixed(8),
-      totalUsdtRevenue: totalUsdtRevenue.toFixed(6),
       totalBtcCommission: totalBtcCommission.toFixed(8),
-      totalUsdtCommission: totalUsdtCommission.toFixed(6),
       commissionRate,
     },
   });
@@ -132,7 +122,7 @@ exports.getSettings = catchAsync(async (req, res) => {
 });
 
 exports.updateSettings = catchAsync(async (req, res, next) => {
-  const { adminBtcAddress, adminUsdtAddress, adminUsdtTrc20Address, commissionRate, btcWalletId, usdtTrc20WalletId } = req.body;
+  const { adminBtcAddress, commissionRate, btcWalletId } = req.body;
 
   const current = await prisma.settings.upsert({ where: { id: 1 }, update: {}, create: { id: 1 } });
 
@@ -164,15 +154,6 @@ exports.updateSettings = catchAsync(async (req, res, next) => {
     updateData.adminBtcAddress = adminBtcAddress;
     await syncWallet(btcWalletId || current.btcWalletId || process.env.BITCART_WALLET_ID, adminBtcAddress, 'BTC');
   }
-  if (adminUsdtTrc20Address && adminUsdtTrc20Address !== current.adminUsdtTrc20Address) {
-    updateData.adminUsdtTrc20Address = adminUsdtTrc20Address;
-    await syncWallet(
-      usdtTrc20WalletId || current.usdtTrc20WalletId || process.env.BITCART_USDT_TRC20_WALLET_ID,
-      adminUsdtTrc20Address,
-      'USDT TRC20'
-    );
-  }
-  if (adminUsdtAddress) updateData.adminUsdtAddress = adminUsdtAddress;
   if (commissionRate !== undefined) {
     const rate = parseFloat(commissionRate);
     if (isNaN(rate) || rate < 0 || rate > 1) {
@@ -181,7 +162,6 @@ exports.updateSettings = catchAsync(async (req, res, next) => {
     updateData.commissionRate = rate;
   }
   if (btcWalletId) updateData.btcWalletId = btcWalletId;
-  if (usdtTrc20WalletId) updateData.usdtTrc20WalletId = usdtTrc20WalletId;
 
   const settings = await prisma.settings.update({ where: { id: 1 }, data: updateData });
   res.status(200).json({ status: 'success', data: { settings, bitcartSync: bitcartChanges } });
@@ -208,12 +188,8 @@ exports.getIncomeStats = catchAsync(async (req, res) => {
   const formattedStats = {};
   for (const item of rows) {
     const date = item.date;
-    if (!formattedStats[date]) formattedStats[date] = { date, btc: 0, usdt: 0 };
-    if (item.currency === 'USDT') {
-      formattedStats[date].usdt = parseFloat(Number(item.amount).toFixed(6));
-    } else {
-      formattedStats[date].btc = parseFloat(Number(item.amount).toFixed(8));
-    }
+    if (!formattedStats[date]) formattedStats[date] = { date, btc: 0 };
+    formattedStats[date].btc = parseFloat(Number(item.amount).toFixed(8));
   }
 
   res.status(200).json({ status: 'success', data: { stats: Object.values(formattedStats) } });
@@ -230,29 +206,19 @@ exports.downloadReport = catchAsync(async (req, res) => {
   });
 
   let totalBtcRevenue = 0;
-  let totalUsdtRevenue = 0;
   let totalBtcCommission = 0;
-  let totalUsdtCommission = 0;
   for (const p of confirmedPurchases) {
     if (!p.sale) continue;
     const price = parseFloat(p.sale.price);
-    const commission = price * commissionRate;
-    if (p.sale.currency === 'USDT') {
-      totalUsdtRevenue += price;
-      totalUsdtCommission += commission;
-    } else {
-      totalBtcRevenue += price;
-      totalBtcCommission += commission;
-    }
+    totalBtcRevenue += price;
+    totalBtcCommission += price * commissionRate;
   }
 
   const stats = {
     totalUsers,
     totalSales: confirmedPurchases.length,
     totalBtcRevenue: totalBtcRevenue.toFixed(8),
-    totalUsdtRevenue: totalUsdtRevenue.toFixed(6),
     totalBtcCommission: totalBtcCommission.toFixed(8),
-    totalUsdtCommission: totalUsdtCommission.toFixed(6),
     commissionRate: `${(commissionRate * 100).toFixed(1)}%`,
   };
 
