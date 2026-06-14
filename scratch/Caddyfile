@@ -3,6 +3,19 @@ admin.satoshibin.com {
 }
 
 bitcart-api.satoshibin.com {
+    # Handle CORS preflight options requests
+    @options {
+        method OPTIONS
+    }
+    header @options {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+        Access-Control-Allow-Credentials "true"
+    }
+    respond @options 204
+
+    # Handle all other requests
     header {
         Access-Control-Allow-Origin "*"
         Access-Control-Allow-Methods "GET, POST, PUT, DELETE, PATCH, OPTIONS"
@@ -11,10 +24,5 @@ bitcart-api.satoshibin.com {
         defer
     }
     
-    @options {
-        method OPTIONS
-    }
-    respond @options 204
-
     reverse_proxy api:8000
 }
