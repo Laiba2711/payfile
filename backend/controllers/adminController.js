@@ -17,7 +17,7 @@ exports.getStats = catchAsync(async (req, res) => {
   const commissionRate = await getCommissionRate();
 
   const confirmedPurchases = await prisma.purchase.findMany({
-    where: { status: 'confirmed' },
+    where: { status: { in: ['confirmed', 'completed'] } },
     include: { sale: true },
   });
 
@@ -81,7 +81,7 @@ exports.getHistory = catchAsync(async (req, res) => {
   const commissionRate = await getCommissionRate();
 
   const history = await prisma.purchase.findMany({
-    where: { status: 'confirmed' },
+    where: { status: { in: ['confirmed', 'completed'] } },
     include: {
       sale: true,
       seller: { select: { firstName: true, lastName: true, email: true } },
@@ -201,7 +201,7 @@ exports.downloadReport = catchAsync(async (req, res) => {
 
   const totalUsers = await prisma.user.count();
   const confirmedPurchases = await prisma.purchase.findMany({
-    where: { status: 'confirmed' },
+    where: { status: { in: ['confirmed', 'completed'] } },
     include: { sale: true },
   });
 
@@ -223,7 +223,7 @@ exports.downloadReport = catchAsync(async (req, res) => {
   };
 
   const historyData = await prisma.purchase.findMany({
-    where: { status: 'confirmed' },
+    where: { status: { in: ['confirmed', 'completed'] } },
     include: {
       sale: true,
       seller: { select: { firstName: true, lastName: true, email: true } },
